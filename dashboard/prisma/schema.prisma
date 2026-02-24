@@ -1,0 +1,212 @@
+// This is your Prisma schema file for lanka-offers PostgreSQL database
+// Optimized for fast geospatial, temporal, and categorical queries
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  directUrl  = env("DIRECT_URL")
+  extensions = [postgis(schema: "public")]
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// CORE MODELS
+// ═══════════════════════════════════════════════════════════════════
+
+/// Main offers table - heavily indexed for fast filtering
+model Offer {
+  id String @id @default(cuid())
+
+  // Core identifiers
+  unique_id  String   @unique // Original scraped ID (e.g., "hnb_8b2fcc30857f_64")
+  source_id  Int // Original source system ID
+  source     String // Bank name (HNB, BOC, etc.)
+  category   String // Category (Dining, Hotel, etc.)
+  categoryId Int?    @map("category_id")
+
+  // Offer details
+  title      String // Offer title/description
+  cardType   String  @map("card_type") // credit, debit, prepaid
+  scrapedAt  DateTime @map("scraped_at") @default(now())
+
+  // ═══════════════════════════════════════════════════════════════════
+  // CURATION WORKFLOW FIELDS
+  // ═══════════════════════════════════════════════════════════════════
+  
+  reviewStatus String @default("pending") @map("review_status") // pending, approved, rejected
+  isInProduction Boolean @default(false) @map("is_in_production") // true when pushed to production
+  pushedToDbAt DateTime? @map("pushed_to_db_at") // When approved and pushed
+  editedAt DateTime? @map("edited_at") // Last manual edit timestamp
+  editNotes String? @map("edit_notes") @db.Text // Admin notes about edits
+  aiSuggestions Json? @map("ai_suggestions") @db.JsonB // AI-generated edit suggestions
+
+  // Structured data - extracted fields
+  merchantName         String? @map("merchant_name")
+  discountPercentage   Float?  @map("discount_percentage")
+  discountDescription  String? @map("discount_description") @db.Text
+  applicableCards      String[] @map("applicable_cards") // Array of card types
+  validFrom            DateTime? @map("valid_from")
+  validTo              DateTime? @map("valid_to")
+  contactPhone         String[] @map("contact_phone")
+  contactEmail         String[] @map("contact_email")
+  bookingRequired      Boolean  @default(false) @map("booking_required")
+  keyRestrictions      String[] @map("key_restrictions")
+  daysApplicable       String? @map("days_applicable")
+  specialConditions    String[] @map("special_conditions")
+
+  // Relations
+  locations Location[] // One-to-many: an offer can have multiple locations
+  rawData   RawData? // One-to-one: link to raw scraped data
+
+  // ═══════════════════════════════════════════════════════════════════
+  // DAILY SYNC TRACKING FIELDS
+  // ═══════════════════════════════════════════════════════════════════
+
+  // Offer lifecycle status for daily sync mechanism
+  status        String    @default("active")   // active | expired
+  lastScrapedAt DateTime? @map("last_scraped_at") // Last time we confirmed this offer on bank site
+  invalidatedAt DateTime? @map("invalidated_at")  // When we marked it expired (bank removed it)
+
+  // Created/Updated timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // ═══════════════════════════════════════════════════════════════════
+  // INDEXES - Optimized for ultra-fast retrieval
+  // ═══════════════════════════════════════════════════════════════════
+
+  @@index([source]) // Filter by bank
+  @@index([category]) // Filter by category
+  @@index([cardType]) // Filter by card type
+  @@index([merchantName]) // Search by merchant
+  @@index([validFrom, validTo]) // Date range queries
+  @@index([category, cardType]) // Combined category + card filter
+  @@index([source, category]) // Bank + category filter
+  @@index([scrapedAt]) // Sort by freshness
+  @@index([validFrom]) // Valid from date
+  @@index([validTo]) // Valid to date
+  @@index([reviewStatus]) // Filter by review status
+  @@index([isInProduction]) // Filter production vs staging
+  @@index([reviewStatus, isInProduction]) // Combined curation filter
+  @@index([status]) // Filter active vs expired (sync queries)
+  @@index([source, status]) // Bank + status (most common sync query)
+  @@index([lastScrapedAt]) // Find stale offers
+  @@index([invalidatedAt]) // Cleanup job queries
+  @@map("offers")
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// DAILY SYNC AUDIT LOG
+// ═══════════════════════════════════════════════════════════════════
+
+/// Records the result of each daily scrape + sync run per bank
+model ScrapeLog {
+  id    String   @id @default(cuid())
+  bank  String   // HNB, BOC, Sampath, etc.
+  syncAt DateTime @default(now()) @map("sync_at")
+
+  // Run outcome
+  status       String  // success | failed | skipped
+  errorMessage String? @map("error_message") @db.Text
+
+  // Set comparison results
+  scrapedCount      Int @default(0) @map("scraped_count")       // Offers found on bank website
+  dbActiveCount     Int @default(0) @map("db_active_count")     // Active offers in DB before sync
+  offersNew         Int @default(0) @map("offers_new")          // Inserted
+  offersUpdated     Int @default(0) @map("offers_updated")      // Touched (timestamp refreshed)
+  offersInvalidated Int @default(0) @map("offers_invalidated")  // Soft-deleted (bank removed them)
+  offersTotal       Int @default(0) @map("offers_total")        // Active offers in DB after sync
+
+  // Performance
+  durationMs Int? @map("duration_ms")
+
+  @@index([bank])
+  @@index([syncAt])
+  @@index([bank, syncAt])
+  @@index([status])
+  @@map("scrape_logs")
+}
+
+/// Location table with PostGIS geography for geospatial queries
+model Location {
+  id String @id @default(cuid())
+
+  // Link to parent offer
+  offerId String @map("offer_id")
+  offer   Offer  @relation(fields: [offerId], references: [id], onDelete: Cascade)
+
+  // PostGIS geography column for lat/lng (SRID 4326 = WGS84)
+  // Using geography for accurate distance calculations
+  geography Unsupported("geography(Point, 4326)")?
+
+  // Redundant lat/lng for convenience
+  latitude  Float?
+  longitude Float?
+
+  // Location metadata from geocoding
+  source           String? // "geocoding_api", "places_text_search"
+  success          Boolean  @default(true)
+  searchAddress    String?  @map("search_address") @db.Text
+  formattedAddress String?  @map("formatted_address") @db.Text
+  placeId          String?  @map("place_id")
+  types            String[] // e.g., ["restaurant", "food", "point_of_interest"]
+  
+  // Location type from classification
+  locationType String? @map("location_type") // SINGLE, LISTED, CHAIN, ONLINE, NONE
+  branchName   String? @map("branch_name") // For listed branches
+
+  // Address components (stored as JSONB for flexibility)
+  addressComponents Json? @map("address_components") @db.JsonB
+
+  // Timestamps
+  timestamp DateTime? // When this was geocoded
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  // ═══════════════════════════════════════════════════════════════════
+  // INDEXES - PostGIS spatial index is crucial for distance queries
+  // ═══════════════════════════════════════════════════════════════════
+
+  @@index([offerId]) // Foreign key lookup
+  @@index([locationType]) // Filter by location type
+  @@index([geography], type: Gist) // GiST spatial index for ST_Distance
+  @@index([latitude, longitude]) // Fallback for non-PostGIS queries
+  @@map("locations")
+}
+
+/// Raw scraped data - stores all original HTML and JSON
+model RawData {
+  id String @id @default(cuid())
+
+  // One-to-one link to offer
+  offerId String @unique @map("offer_id")
+  offer   Offer  @relation(fields: [offerId], references: [id], onDelete: Cascade)
+
+  // Raw fields from scraper
+  rawValidFrom    String? @map("raw_valid_from") // e.g., "2020-09-09"
+  rawValidUntil   String? @map("raw_valid_until") // e.g., "2026-02-28"
+  rawHtmlContent  String? @map("raw_html_content") @db.Text // Full HTML
+  rawListItem     Json?   @map("raw_list_item") @db.JsonB // Original list item data
+  rawDetail       Json?   @map("raw_detail") @db.JsonB // Original detail data
+
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // ═══════════════════════════════════════════════════════════════════
+  // INDEXES - GIN for JSONB queries
+  // ═══════════════════════════════════════════════════════════════════
+
+  @@index([rawListItem], type: Gin) // Fast JSONB queries
+  @@index([rawDetail], type: Gin) // Fast JSONB queries
+  @@map("raw_data")
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// FULL-TEXT SEARCH (Optional - can be added later)
+// ═══════════════════════════════════════════════════════════════════
+// We can add a tsvector column to Offer for full-text search:
+// searchVector Unsupported("tsvector")?
+// @@index([searchVector], type: Gin)

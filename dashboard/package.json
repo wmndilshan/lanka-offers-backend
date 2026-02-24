@@ -1,0 +1,44 @@
+{
+  "name": "scrapendb-dashboard",
+  "version": "1.0.0",
+  "description": "Next.js admin dashboard for ScrapeNDB bank offers",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "sync": "node scripts/sync.js",
+    "sync:all": "node scripts/sync.js --bank=all",
+    "sync:dry": "node scripts/sync.js --bank=all --dry-run",
+    "sync:stats": "node scripts/sync.js --stats",
+    "cleanup": "node scripts/cleanup.js",
+    "cleanup:dry": "node scripts/cleanup.js --dry-run",
+    "cleanup:stats": "node scripts/cleanup.js --stats",
+    "scheduler": "node scripts/scheduler.js",
+    "scheduler:now": "node scripts/scheduler.js --run-now",
+    "import": "node scripts/import-data.js"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.22.0",
+    "date-fns": "^3.3.1",
+    "dotenv": "^17.3.1",
+    "leaflet": "^1.9.4",
+    "lucide-react": "^0.344.0",
+    "next": "^14.1.0",
+    "node-cron": "^4.2.1",
+    "openai": "^6.22.0",
+    "pg": "^8.18.0",
+    "prisma": "^5.22.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-leaflet": "^4.2.1",
+    "react-leaflet-cluster": "^2.1.0",
+    "recharts": "^3.7.0"
+  },
+  "devDependencies": {
+    "autoprefixer": "^10.4.17",
+    "postcss": "^8.4.35",
+    "tailwindcss": "^3.4.1"
+  }
+}

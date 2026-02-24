@@ -1,0 +1,158 @@
+Sampath Bank
+- Hotels                          -> https://www.sampath.lk/api/card-promotions?category=hotels  
+- SuperMarkets                    -> https://www.sampath.lk/api/card-promotions?category=super_market 
+- Online                          -> https://www.sampath.lk/api/card-promotions?category=online
+- Electronics & Furniture         -> https://www.sampath.lk/api/card-promotions?category=Electronics_and_Furniture
+- Health and insurance            -> https://www.sampath.lk/api/card-promotions?category=health_and_insurance
+- Fashion                         -> https://www.sampath.lk/api/card-promotions?category=fashion
+- Dining                          -> https://www.sampath.lk/api/card-promotions?category=dining
+- Travel and Leisure              -> https://www.sampath.lk/api/card-promotions?category=travel_and_leisure
+- Premium Offers                  -> https://www.sampath.lk/api/card-promotions?category=Premium_Offers
+- VISA Offers                     -> https://www.sampath.lk/api/card-promotions?category=VISA_Offers
+- Mastercard Offers               -> https://www.sampath.lk/api/card-promotions?category=Mastercard_Offers
+- Other                           -> https://www.sampath.lk/api/card-promotions?category=Other
+
+Peoples Bank
+- Havelock City Mall              -> https://www.peoplesbank.lk/havelock-city-mall-offers/, https://www.peoplesbank.lk/havelock-city-mall-debit/
+- Leisure                         -> https://www.peoplesbank.lk/leisure-credit-card/, https://www.peoplesbank.lk/leisure-debit-card/ 
+- Restaurants                     -> https://www.peoplesbank.lk/restaurants-credit-card/, https://www.peoplesbank.lk/restaurants-debit-card/
+- Online Stores                   -> https://www.peoplesbank.lk/online-stores-credit-card/, https://www.peoplesbank.lk/online-stores-debit-card/
+- Clothing                        -> https://www.peoplesbank.lk/clothing-credit-card/, https://www.peoplesbank.lk/clothing-debit-card/
+- Home Care & Electronics         -> https://www.peoplesbank.lk/electronics-credit-card/, https://www.peoplesbank.lk/electronics-debit-card/
+- Supermarkets                    -> https://www.peoplesbank.lk/super-markets-credit-card/, https://www.peoplesbank.lk/super-markets-debit-card/
+- Jewellery                       -> https://www.peoplesbank.lk/jewelry-credit-card/, https://www.peoplesbank.lk/jewelry-debit-card/
+- Healthcare                      -> https://www.peoplesbank.lk/healthcare-credit-card/, 
+- Opticians                       -> , https://www.peoplesbank.lk/opticians-debit-card/
+- Car Care                        -> https://www.peoplesbank.lk/car-care-credit-card/, https://www.peoplesbank.lk/car-care-debit-card/
+- Travel                          -> https://www.peoplesbank.lk/credit-card-travels/,
+- Life Style & Entertainment      -> https://www.peoplesbank.lk/credit-card-entertainment/,
+- Others                          -> https://www.peoplesbank.lk/credit-card-others/, https://www.peoplesbank.lk/debit-card-others/
+- Mastercard Offers               -> https://www.peoplesbank.lk/mastercard-credit-card-offers/, https://www.peoplesbank.lk/mastercard-debit-card-offers/
+- VISA Offers                     -> https://www.peoplesbank.lk/visa-credit-card-offers/, 
+# - Instalment Plans                -> # this is plan type not offer
+
+NDB Bank
+- Privilege Weekend                   -> https://www.ndbbank.com/cards/card-offers/Privilege%20Weekend
+- Clothing & Accessories              -> https://www.ndbbank.com/cards/card-offers/clothing-accessories
+- Restaurants & Pubs                  -> https://www.ndbbank.com/cards/card-offers/restaurants-pubs  
+- Special Promotions                  -> https://www.ndbbank.com/cards/card-offers/special-ipp-promotions
+- Supermarkets                        -> https://www.ndbbank.com/cards/card-offers/supermarkets
+- Jewellery & Watches                 -> https://www.ndbbank.com/cards/card-offers/jewellery-watches
+- Hotels & Villas                     -> https://www.ndbbank.com/cards/card-offers/hotels-villas
+- Hospital & Healthcare               -> https://www.ndbbank.com/cards/card-offers/hospital-healthcare
+- Wellness & Beautycare               -> https://www.ndbbank.com/cards/card-offers/wellness-beautycare
+- Online Stores                       -> https://www.ndbbank.com/cards/card-offers/online-stores
+- Mastercard Credit Card              -> https://www.ndbbank.com/cards/card-offers/Mastercard%20Credit%20Card
+- Education                           -> https://www.ndbbank.com/cards/card-offers/education
+- Solar, Housing & Construction       -> https://www.ndbbank.com/cards/card-offers/solar-housing-construction
+- Entertainment & Outdoor Activities  -> https://www.ndbbank.com/cards/card-offers/Entertainment%20&%20Outdoor%20Activities
+- Automobile                          -> https://www.ndbbank.com/cards/card-offers/automobile
+- Insurance                           -> https://www.ndbbank.com/cards/card-offers/insurance
+- VISA Offers                         -> https://www.ndbbank.com/cards/card-offers/VISA%20Offers
+- Travel                              -> https://www.ndbbank.com/cards/card-offers/travel
+- Special VISA Offers
+  - Food & Wine                       -> https://www.ndbbank.com/cards/card-offers/visa-offers/food-&-wine
+  - Travel                            -> https://www.ndbbank.com/cards/card-offers/visa-offers/travel
+  - Lifestyle                         -> https://www.ndbbank.com/cards/card-offers/visa-offers/lifestyle
+  - Sustainability                    -> https://www.ndbbank.com/cards/card-offers/visa-offers/sustainability
+  - Apperel & Accessories             -> https://www.ndbbank.com/cards/card-offers/visa-offers/apparel-&-accessories
+  - Health & Beauty                   -> https://www.ndbbank.com/cards/card-offers/visa-offers/health-&-beauty
+  - Buisness Essentials               -> https://www.ndbbank.com/cards/card-offers/visa-offers/business-essentials
+  - Retail                            -> https://www.ndbbank.com/cards/card-offers/visa-offers/retail
+
+DFCC Bank
+- Supermarkets                        -> https://www.dfcc.lk/promotions-categories/supermarket/
+- Dining                              -> https://www.dfcc.lk/promotions-categories/dining/
+- 0% Easy Payment Plans               -> https://www.dfcc.lk/promotions-categories/0-easy-payment-plans/
+- Pinnacne                            -> https://www.dfcc.lk/promotions-categories/pinnacle/
+- Online                              -> https://www.dfcc.lk/promotions-categories/online/
+- Utility                             -> https://www.dfcc.lk/promotions-categories/utility/
+- Clothing and Retail                 -> https://www.dfcc.lk/promotions-categories/clothing__retail/
+- Hotels                              -> https://www.dfcc.lk/promotions-categories/hotels/
+- Home Appliances                     -> https://www.dfcc.lk/promotions-categories/home-appliances/
+- Autocare                            -> https://www.dfcc.lk/promotions-categories/autocare/
+- Travel                              -> https://www.dfcc.lk/promotions-categories/travel/
+- Healthcare & Insurance              -> https://www.dfcc.lk/promotions-categories/healthcare-insurance/
+- Jewellery                           -> https://www.dfcc.lk/promotions-categories/jewellery/
+- Footwear                            -> https://www.dfcc.lk/promotions-categories/footwear/
+- VISA Offers                         -> https://www.dfcc.lk/promotions-categories/visa-offers/
+- Mastercard Offers                   -> https://www.dfcc.lk/promotions-categories/mastercard-offers/
+- Opticians                           -> https://www.dfcc.lk/promotions-categories/opticians/
+- Aloka Offers                        -> https://www.dfcc.lk/promotions-categories/aloka/
+- Baby Shops & Gift Shops             -> https://www.dfcc.lk/promotions-categories/mastercard-offers/
+- Holidays                            -> https://www.dfcc.lk/promotions-categories/holidays/
+- Gifts & Wellness                    -> https://www.dfcc.lk/promotions-categories/gift_wellness/
+- Education                           -> https://www.dfcc.lk/promotions-categories/education/
+- Entertainment                       -> https://www.dfcc.lk/promotions-categories/entertainment/
+- Solar Offers                        -> https://www.dfcc.lk/promotions-categories/solar-offers/
+- Other                               -> https://www.dfcc.lk/promotions-categories/other/
+
+HNB Bank
+- Hotel               -> https://venus.hnb.lk/api/get_all_web_card_promos?cat=1&page=1&cardType=all
+- Travel              -> https://venus.hnb.lk/api/get_all_web_card_promos?cat=2&page=1&cardType=all
+- Dining              -> https://venus.hnb.lk/api/get_all_web_card_promos?cat=3&page=1&cardType=all
+- Shopping            -> https://venus.hnb.lk/api/get_all_web_card_promos?cat=4&page=1&cardType=all
+- Lifestyle           -> https://venus.hnb.lk/api/get_all_web_card_promos?cat=5&page=1&cardType=all
+- Online             -> https://venus.hnb.lk/api/get_all_web_card_promos?cat=6&page=1&cardType=all
+- Autocare           -> https://venus.hnb.lk/api/get_all_web_card_promos?cat=7&page=1&cardType=all
+- Other              -> https://venus.hnb.lk/api/get_all_web_card_promos?cat=8&page=1&cardType=all
+- Fashion            -> https://venus.hnb.lk/api/get_all_web_card_promos?cat=9&page=1&cardType=all
+- Hospitals          -> https://venus.hnb.lk/api/get_all_web_card_promos?cat=10&page=1&cardType=all
+- Jewellery          -> https://venus.hnb.lk/api/get_all_web_card_promos?cat=11&page=1&cardType=all
+- Education          -> https://venus.hnb.lk/api/get_all_web_card_promos?cat=12&page=1&cardType=all
+- Solar Solutions    -> https://venus.hnb.lk/api/get_all_web_card_promos?cat=13&page=1&cardType=all
+
+BOC Bank             
+- Travel and Leisure  -> https://www.boc.lk/personal-banking/card-offers#travel-and-leisure
+- Supermarkets        -> https://www.boc.lk/personal-banking/card-offers#supermarkets
+- Lifestyle           -> https://www.boc.lk/personal-banking/card-offers#lifestyle
+- Utility & Insurance -> https://www.boc.lk/personal-banking/card-offers#utility-insurance
+- Education           -> https://www.boc.lk/personal-banking/card-offers#education
+- Zero Plans          -> https://www.boc.lk/personal-banking/card-offers#zero-plans
+- Online              -> https://www.boc.lk/personal-banking/card-offers#online
+- Fashion             -> https://www.boc.lk/personal-banking/card-offers#fashion
+- Health & Beauty     -> https://www.boc.lk/personal-banking/card-offers#health-beauty
+- Automobile          -> https://www.boc.lk/personal-banking/card-offers#automobile
+- Dining              -> https://www.boc.lk/personal-banking/card-offers#dining
+- Valentine's Offers  -> https://www.boc.lk/personal-banking/card-offers#valentines-offers
+
+Seylan Bank
+- Clothing             -> https://www.seylan.lk/promotions/cards/style
+- Salon & SPA          -> https://www.seylan.lk/promotions/cards/salon-spa
+- Kiddies              -> https://www.seylan.lk/promotions/cards/kiddies
+- Special Promotinos   -> https://www.seylan.lk/promotions/cards/special-promotions
+- Local Travel         -> https://www.seylan.lk/promotions/cards/local-travel
+- Dining               -> https://www.seylan.lk/promotions/cards/dining
+- Online Deals         -> https://www.seylan.lk/promotions/cards/online-deals
+- Cracker Deals        -> https://www.seylan.lk/promotions/cards/cracker-deals
+- Pay Plans            -> https://www.seylan.lk/promotions/cards/pay-plans
+- Auto                 -> https://www.seylan.lk/promotions/cards/auto
+- Overseas Travel      -> https://www.seylan.lk/promotions/cards/overseas-travel
+- Education            -> https://www.seylan.lk/promotions/cards/education
+- Electronics          -> https://www.seylan.lk/promotions/cards/electronics
+- Supermarket          -> https://www.seylan.lk/promotions/cards/supermarket
+- Lifestyle            -> https://www.seylan.lk/promotions/cards/lifestyle
+- Solar                -> https://www.seylan.lk/promotions/cards/solar
+- Wellness             -> https://www.seylan.lk/promotions/cards/wellness
+- Insurance            -> https://www.seylan.lk/promotions/cards/insurance
+- Eye Care             -> https://www.seylan.lk/promotions/cards/eye-care
+- Accelerate Savings   -> https://www.seylan.lk/promotions/accelerate
+- Health               -> https://www.seylan.lk/promotions/cards/health
+- Opticals             -> 
+- Jewelry              -> https://www.seylan.lk/promotions/cards/jewelry
+- Affinity Cards       -> https://www.seylan.lk/promotions/cards/affinity-cards
+- Harasara             -> https://www.seylan.lk/promotions/cards/harasara
+
+PanAsia Bank
+- Privilege Banking
+- BizClass
+- Supermarkets
+- Fashion
+- Jewellery
+- Hotel
+- Restaurants
+- Healthcare
+- Lifestyle
+- Automobile
+- Online Shopping
+- Other

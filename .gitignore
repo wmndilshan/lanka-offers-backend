@@ -1,0 +1,53 @@
+# Node
+node_modules/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env
+.env
+.env.*
+
+# Build / output
+output/
+dashboard/.next/
+dashboard/out/
+dashboard/dist/
+
+# Caches
+cache*/
+cache_*/
+cache_geo/
+
+# Scrape artifacts
+*_offers*.json
+*_offers*.csv
+*_all_offers.json
+*_all_v*.json
+bank_offers_*.csv
+bank_offers_with_ids_*.json
+ndb_all_offers.json
+peoples_bank_all_offers.json
+sampath_offers_detailed.json
+sampath_offers_simple.json
+sampath_offers.csv
+ndb_offers*.json
+ndb_offers.csv
+pabc_offers*.json
+peoples_bank_offers*.json
+dfcc_all_promotions.json
+dfcc_promotions_simple.json
+
+# Large HTML/screenshots
+*.png
+*.html
+
+# Tooling
+.claude/
