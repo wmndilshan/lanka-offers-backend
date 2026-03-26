@@ -41,6 +41,8 @@ jobs:
       - name: Backend check
         run: npm run check
         working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL || 'postgresql://ci:ci@localhost:5432/ci' }}
 
       - name: Dashboard lint
         run: npm run lint
