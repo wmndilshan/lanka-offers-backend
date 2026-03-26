@@ -1,0 +1,6 @@
+{
+  "bank": "ndb",
+  "active": "ndb-5.js",
+  "structuredOutput": "ndb_all_v4.json",
+  "geoOutput": "ndb_geo.json"
+}

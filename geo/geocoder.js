@@ -225,6 +225,10 @@ class Geocoder {
     this.stats = { geocode_cached: 0, geocode_new: 0, geocode_failed: 0, places_cached: 0, places_new: 0 };
   }
 
+  _isInSriLanka(lat, lng) {
+    return lat >= 5.9 && lat <= 10.0 && lng >= 79.5 && lng <= 82.0;
+  }
+
   // ── Geocoding API ($5/1K) — single address → lat/lng ─────────────────
   async geocodeAddress(address, retryCount = 0) {
     // Ensure Sri Lanka suffix
@@ -262,6 +266,11 @@ class Geocoder {
           })),
           timestamp: new Date().toISOString()
         };
+        if (!this._isInSriLanka(result.latitude, result.longitude)) {
+          result.success = false;
+          result.error = 'OUT_OF_BOUNDS';
+          result.message = 'Coordinates outside Sri Lanka bounds';
+        }
         this.stats.geocode_new++;
       } else {
         result = {
@@ -332,6 +341,7 @@ class Geocoder {
 
         // Track API call (each page counts as one request)
         if (this.tracker) this.tracker.record('places', pageToken ? `${searchQuery} [page]` : searchQuery);
+        this.stats.places_new++;
 
         const response = await axios.post(
           'https://places.googleapis.com/v1/places:searchText',
@@ -366,7 +376,6 @@ class Geocoder {
         }
       } while (pageToken);
 
-      this.stats.places_new++;
       this.cache.setPlaces(searchQuery, allResults);
       await sleep(this.requestDelay);
       return allResults;

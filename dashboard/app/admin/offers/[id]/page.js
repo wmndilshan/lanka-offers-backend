@@ -5,13 +5,10 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
     ArrowLeft, Save, Trash2, ExternalLink, AlertCircle,
-    RefreshCw, CheckCircle, ToggleLeft, ToggleRight
+    RefreshCw, CheckCircle, ToggleLeft, ToggleRight, Sparkles, ShieldCheck, Zap, Globe, Calendar, Info
 } from 'lucide-react';
 
-const BANKS = ['HNB', 'BOC', 'NDB', 'Sampath', 'Pan Asia', 'Seylan', 'DFCC', "People's Bank"];
 const CATEGORIES = ['Dining', 'Hotel', 'Lifestyle', 'Shopping', 'Travel', 'Health', 'Groceries', 'Fashion', 'Electronics', 'Entertainment', 'Fuel', 'Other'];
-const DISCOUNT_TYPES = ['percentage', 'flat', 'bogo'];
-const CARD_TYPES = ['Visa', 'Mastercard', 'Amex', 'Credit', 'Debit', 'HNB Cards', 'BOC Cards', 'NDB Cards', 'Sampath Cards', 'Seylan Cards'];
 
 export default function OfferEditPage({ params }) {
     const router = useRouter();
@@ -23,335 +20,295 @@ export default function OfferEditPage({ params }) {
     const [loading, setLoading] = useState(!isNew);
     const [saving, setSaving] = useState(false);
     const [deleting, setDeleting] = useState(false);
-    const [saved, setSaved] = useState(false);
-    const [errors, setErrors] = useState({});
+    const [validation, setValidation] = useState(null);
+    const [validationLoading, setValidationLoading] = useState(false);
 
     useEffect(() => {
         if (isNew) {
-            const blank = {
-                title: '', description: '', merchantName: '', category: '', cardType: 'credit',
+            setForm({
+                title: '', description: '', merchantName: '', category: 'Dining', cardType: 'credit',
                 discountPercentage: '', discountDescription: '', source: 'HNB',
                 validFrom: '', validTo: '', applicableCards: [], reviewStatus: 'pending',
-                bookingRequired: false,
-            };
-            setForm(blank);
+                bookingRequired: false, isInProduction: false
+            });
             return;
         }
-        const fetchOffer = async () => {
-            try {
-                const res = await fetch(`/api/offers/${id}`);
-                if (!res.ok) throw new Error('Offer not found');
-                const data = await res.json();
-                setOffer(data);
-                setForm({
-                    ...data,
-                    validFrom: data.validFrom ? data.validFrom.split('T')[0] : '',
-                    validTo: data.validTo ? data.validTo.split('T')[0] : '',
-                    applicableCards: data.applicableCards || [],
-                    discountPercentage: data.discountPercentage ?? '',
-                });
-            } catch (e) {
-                console.error(e);
-            } finally {
-                setLoading(false);
-            }
-        };
         fetchOffer();
     }, [id]);
 
+    const fetchOffer = async () => {
+        try {
+            const res = await fetch(`/api/offers/${id}`);
+            if (!res.ok) throw new Error('Offer not found');
+            const data = await res.json();
+            setOffer(data);
+            setForm({
+                ...data,
+                validFrom: data.validFrom ? data.validFrom.split('T')[0] : '',
+                validTo: data.validTo ? data.validTo.split('T')[0] : '',
+                applicableCards: data.applicableCards || [],
+                discountPercentage: data.discountPercentage ?? '',
+            });
+            fetchValidation();
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const fetchValidation = async (refresh = false) => {
+        if (isNew) return;
+        setValidationLoading(true);
+        try {
+            const res = await fetch(`/api/offers/${id}/validation${refresh ? '?refresh=1' : ''}`);
+            const data = await res.json();
+            setValidation(data.validation || data.result);
+        } catch (e) {
+            console.warn('Validation fetch error:', e);
+        } finally {
+            setValidationLoading(false);
+        }
+    };
+
     const set = (key, value) => {
         setForm(prev => ({ ...prev, [key]: value }));
-        setErrors(prev => ({ ...prev, [key]: undefined }));
-        setSaved(false);
     };
 
-    const toggleCard = (card) => {
-        const cards = form.applicableCards || [];
-        set('applicableCards', cards.includes(card) ? cards.filter(c => c !== card) : [...cards, card]);
-    };
-
-    const validate = () => {
-        const errs = {};
-        if (!form.title?.trim()) errs.title = 'Title is required';
-        if (!form.merchantName?.trim()) errs.merchantName = 'Merchant name is required';
-        if (form.discountPercentage !== '' && (Number(form.discountPercentage) < 0 || Number(form.discountPercentage) > 100))
-            errs.discountPercentage = 'Discount must be 0–100%';
-        if (form.validFrom && form.validTo && form.validTo < form.validFrom)
-            errs.validTo = 'Valid Until must be after Valid From';
-        setErrors(errs);
-        return Object.keys(errs).length === 0;
-    };
-
-    const handleSave = async () => {
-        if (!validate()) return;
+    const handleSave = async (publish = false) => {
         setSaving(true);
         try {
-            const method = isNew ? 'POST' : 'PUT';
-            const url = isNew ? '/api/offers' : `/api/offers/${id}`;
-            const res = await fetch(url, {
-                method,
+            const payload = {
+                ...form,
+                reviewStatus: publish ? 'approved' : form.reviewStatus,
+                isInProduction: publish ? true : form.isInProduction,
+                discountPercentage: form.discountPercentage !== '' ? Number(form.discountPercentage) : null,
+                validFrom: form.validFrom || null,
+                validTo: form.validTo || null,
+                pushedToDbAt: publish ? new Date() : form.pushedToDbAt
+            };
+
+            const res = await fetch(isNew ? '/api/offers' : `/api/offers/${id}`, {
+                method: isNew ? 'POST' : 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    ...form,
-                    discountPercentage: form.discountPercentage !== '' ? Number(form.discountPercentage) : null,
-                    validFrom: form.validFrom || null,
-                    validTo: form.validTo || null,
-                }),
+                body: JSON.stringify(payload),
             });
-            if (!res.ok) throw new Error(await res.text());
-            setSaved(true);
-            if (isNew) {
+
+            if (!res.ok) throw new Error('Save failed');
+
+            if (publish) router.push('/admin/queue');
+            else if (isNew) {
                 const created = await res.json();
                 router.push(`/admin/offers/${created.id}`);
+            } else {
+                fetchOffer();
             }
         } catch (e) {
-            alert('Save failed: ' + e.message);
+            alert('Error: ' + e.message);
         } finally {
             setSaving(false);
         }
     };
 
     const handleDelete = async () => {
-        if (!confirm('Delete this offer permanently? This cannot be undone.')) return;
+        if (!confirm('Move to archive?')) return;
         setDeleting(true);
         try {
-            const res = await fetch(`/api/offers/${id}`, { method: 'DELETE' });
-            if (!res.ok) throw new Error('Delete failed');
+            await fetch(`/api/offers/${id}`, { method: 'DELETE' });
             router.push('/admin/offers');
         } catch (e) {
-            alert('Delete failed: ' + e.message);
+            alert('Delete failed');
             setDeleting(false);
         }
     };
 
-    if (loading) {
-        return (
-            <div className="flex items-center justify-center h-64">
-                <div className="animate-spin w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full" />
-            </div>
-        );
-    }
-
-    if (!form) {
-        return <div className="text-center py-20 text-slate-500">Offer not found</div>;
-    }
+    if (loading) return <div className="h-screen bg-[#020617] flex items-center justify-center"><RefreshCw className="animate-spin text-sky-500" /></div>;
 
     return (
-        <div className="space-y-6 max-w-4xl">
+        <div className="min-h-screen bg-[#020617] p-8 space-y-8 animate-fade-in text-slate-200">
             {/* Header */}
-            <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                    <Link href="/admin/offers" className="p-2 rounded-md hover:bg-slate-100 text-slate-500 transition-colors">
-                        <ArrowLeft size={18} />
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                <div className="flex items-center gap-6">
+                    <Link href="/admin/offers" className="p-3 glass-card rounded-xl hover:bg-white/10 transition-colors">
+                        <ArrowLeft size={20} className="text-slate-400" />
                     </Link>
                     <div>
-                        <h1 className="text-xl font-semibold text-slate-900">
-                            {isNew ? 'New Offer' : 'Edit Offer'}
+                        <h1 className="text-2xl font-black text-white tracking-tight flex items-center gap-3">
+                            {isNew ? 'New Entry' : 'Refine Offer'}
+                            {!isNew && <span className="text-[10px] font-mono text-slate-500 bg-white/5 px-2 py-1 rounded border border-white/5 uppercase tracking-tighter">{offer?.unique_id}</span>}
                         </h1>
-                        {!isNew && <p className="text-xs text-slate-400 font-mono mt-0.5">{id}</p>}
+                        <p className="text-slate-400 text-sm mt-1 font-medium italic">Level 6 Command Center — Manual Review & Production Push</p>
                     </div>
                 </div>
-                <div className="flex items-center gap-2">
-                    {!isNew && (
-                        <button
-                            onClick={handleDelete}
-                            disabled={deleting}
-                            className="flex items-center gap-1.5 px-3 py-2 text-sm text-red-600 border border-red-200 rounded-md hover:bg-red-50 transition-colors disabled:opacity-50"
-                        >
-                            {deleting ? <RefreshCw size={14} className="animate-spin" /> : <Trash2 size={14} />}
-                            Delete
-                        </button>
-                    )}
+
+                <div className="flex items-center gap-3">
                     <button
-                        onClick={() => router.push('/admin/offers')}
-                        className="px-3 py-2 text-sm text-slate-600 border border-slate-200 rounded-md hover:bg-slate-50 transition-colors"
-                    >
-                        Discard
-                    </button>
-                    <button
-                        onClick={handleSave}
+                        onClick={() => handleSave(false)}
                         disabled={saving}
-                        className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-md hover:bg-emerald-700 disabled:opacity-60 transition-colors"
+                        className="btn-premium bg-slate-800 text-white border border-white/5 hover:bg-slate-700"
                     >
-                        {saving ? <RefreshCw size={14} className="animate-spin" /> : saved ? <CheckCircle size={14} /> : <Save size={14} />}
-                        {saving ? 'Saving...' : saved ? 'Saved!' : 'Save Changes'}
+                        {saving ? <RefreshCw size={18} className="animate-spin" /> : <Save size={18} />}
+                        Save Draft
+                    </button>
+                    <button
+                        onClick={() => handleSave(true)}
+                        disabled={saving}
+                        className="btn-premium-emerald group"
+                    >
+                        <Zap size={18} fill="currentColor" className="group-hover:animate-pulse" />
+                        Push to Production
                     </button>
                 </div>
             </div>
 
-            {/* Form */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Left column - core details */}
-                <div className="lg:col-span-2 space-y-5">
-                    <FormSection title="Offer Details">
-                        <Field label="Title *" error={errors.title}>
-                            <input type="text" value={form.title || ''} onChange={e => set('title', e.target.value)}
-                                maxLength={200} placeholder="e.g. 20% off at KFC with HNB credit card"
-                                className={`input ${errors.title ? 'border-red-400' : ''}`} />
-                        </Field>
-                        <Field label="Description">
-                            <textarea value={form.description || ''} onChange={e => set('description', e.target.value)}
-                                maxLength={1000} rows={4} placeholder="Full offer details..."
-                                className="input resize-none" />
-                        </Field>
-                        <Field label="Merchant Name *" error={errors.merchantName}>
-                            <input type="text" value={form.merchantName || ''} onChange={e => set('merchantName', e.target.value)}
-                                placeholder="e.g. KFC" className={`input ${errors.merchantName ? 'border-red-400' : ''}`} />
-                        </Field>
-                        <div className="grid grid-cols-2 gap-4">
-                            <Field label="Category">
-                                <select value={form.category || ''} onChange={e => set('category', e.target.value)} className="input">
-                                    <option value="">Select category</option>
-                                    {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                                </select>
-                            </Field>
-                            <Field label="Discount Type">
-                                <select value={form.discountType || 'percentage'} onChange={e => set('discountType', e.target.value)} className="input">
-                                    {DISCOUNT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                                </select>
-                            </Field>
+            <div className="grid grid-cols-1 xl:grid-cols-12 gap-8">
+                {/* Main Form */}
+                <div className="xl:col-span-8 space-y-8">
+                    <div className="glass-card p-8 space-y-8">
+                        <div className="flex items-center gap-4 border-b border-white/5 pb-4 mb-2">
+                            <div className="p-2 bg-sky-500/10 rounded-lg border border-sky-500/20">
+                                <ShieldCheck className="text-sky-400" size={20} />
+                            </div>
+                            <h2 className="text-lg font-bold text-white tracking-tight">Offer Manifest</h2>
                         </div>
-                        <div className="grid grid-cols-2 gap-4">
-                            <Field label="Discount %" error={errors.discountPercentage}>
-                                <input type="number" value={form.discountPercentage ?? ''} onChange={e => set('discountPercentage', e.target.value)}
-                                    min={0} max={100} placeholder="e.g. 20"
-                                    className={`input ${errors.discountPercentage ? 'border-red-400' : ''}`} />
-                            </Field>
-                            <Field label="Discount Description">
-                                <input type="text" value={form.discountDescription || ''} onChange={e => set('discountDescription', e.target.value)}
-                                    placeholder="e.g. 20% off food total" className="input" />
-                            </Field>
-                        </div>
-                    </FormSection>
 
-                    <FormSection title="Validity">
-                        <div className="grid grid-cols-2 gap-4">
-                            <Field label="Valid From">
-                                <input type="date" value={form.validFrom || ''} onChange={e => set('validFrom', e.target.value)} className="input" />
-                            </Field>
-                            <Field label="Valid Until" error={errors.validTo}>
-                                <input type="date" value={form.validTo || ''} onChange={e => set('validTo', e.target.value)}
-                                    className={`input ${errors.validTo ? 'border-red-400' : ''}`} />
-                            </Field>
-                        </div>
-                        <Field label="Days Applicable">
-                            <input type="text" value={form.daysApplicable || ''} onChange={e => set('daysApplicable', e.target.value)}
-                                placeholder="e.g. Monday-Friday, Weekends" className="input" />
-                        </Field>
-                    </FormSection>
+                        <div className="space-y-8">
+                            <div className="space-y-3">
+                                <label className="text-[10px] uppercase tracking-widest text-slate-500 font-black ml-1">Merchant Identity</label>
+                                <input
+                                    value={form.merchantName || ''}
+                                    onChange={e => set('merchantName', e.target.value)}
+                                    className="glass-input w-full text-xl font-black text-emerald-400 placeholder:text-slate-800"
+                                    placeholder="Ex: Amaya Lake..."
+                                />
+                            </div>
 
-                    <FormSection title="Applicable Cards">
-                        <div className="flex flex-wrap gap-2">
-                            {CARD_TYPES.map(card => {
-                                const active = (form.applicableCards || []).includes(card);
-                                return (
-                                    <button
-                                        key={card}
-                                        type="button"
-                                        onClick={() => toggleCard(card)}
-                                        className={`px-3 py-1.5 text-xs rounded-full border transition-colors ${active ? 'bg-emerald-600 text-white border-emerald-600' : 'border-slate-300 text-slate-600 hover:border-emerald-400'
-                                            }`}
-                                    >
-                                        {card}
-                                    </button>
-                                );
-                            })}
+                            <div className="space-y-3">
+                                <label className="text-[10px] uppercase tracking-widest text-slate-500 font-black ml-1">Marketing Headline</label>
+                                <textarea
+                                    value={form.title || ''}
+                                    onChange={e => set('title', e.target.value)}
+                                    className="glass-input w-full min-h-[120px] text-lg font-bold leading-relaxed placeholder:text-slate-800"
+                                    placeholder="The primary hook for the user..."
+                                />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-8">
+                                <div className="space-y-3">
+                                    <label className="text-[10px] uppercase tracking-widest text-slate-500 font-black ml-1">Core Categorization</label>
+                                    <select value={form.category} onChange={e => set('category', e.target.value)} className="glass-input w-full appearance-none cursor-pointer font-bold uppercase tracking-widest text-xs">
+                                        {CATEGORIES.map(c => <option key={c} value={c} className="bg-slate-900">{c}</option>)}
+                                    </select>
+                                </div>
+                                <div className="space-y-3">
+                                    <label className="text-[10px] uppercase tracking-widest text-slate-500 font-black ml-1">Discount Payload (%)</label>
+                                    <input
+                                        type="number"
+                                        value={form.discountPercentage ?? ''}
+                                        onChange={e => set('discountPercentage', e.target.value)}
+                                        className="glass-input w-full text-sky-400 font-black text-2xl text-center"
+                                        placeholder="0"
+                                    />
+                                </div>
+                            </div>
                         </div>
-                    </FormSection>
+                    </div>
+
+                    <div className="glass-card p-8 bg-white/[0.01]">
+                        <div className="flex items-center gap-4 border-b border-white/5 pb-4 mb-6">
+                            <div className="p-2 bg-emerald-500/10 rounded-lg border border-emerald-500/20">
+                                <Calendar className="text-emerald-400" size={20} />
+                            </div>
+                            <h2 className="text-lg font-bold text-white tracking-tight">Timeline Architecture</h2>
+                        </div>
+                        <div className="grid grid-cols-2 gap-8">
+                            <div className="space-y-3">
+                                <label className="text-[10px] uppercase tracking-widest text-slate-500 font-black ml-1">Activation Gate</label>
+                                <input type="date" value={form.validFrom} onChange={e => set('validFrom', e.target.value)} className="glass-input w-full font-bold uppercase" />
+                            </div>
+                            <div className="space-y-3">
+                                <label className="text-[10px] uppercase tracking-widest text-slate-500 font-black ml-1">Expiration Gate</label>
+                                <input type="date" value={form.validTo} onChange={e => set('validTo', e.target.value)} className="glass-input w-full font-bold uppercase" />
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
-                {/* Right column - metadata */}
-                <div className="space-y-5">
-                    <FormSection title="Source">
-                        <Field label="Source Bank">
-                            <select value={form.source || 'HNB'} onChange={e => set('source', e.target.value)} className="input">
-                                {BANKS.map(b => <option key={b} value={b}>{b}</option>)}
-                            </select>
-                        </Field>
-                        <Field label="Card Type">
-                            <select value={form.cardType || 'credit'} onChange={e => set('cardType', e.target.value)} className="input">
-                                <option value="credit">Credit</option>
-                                <option value="debit">Debit</option>
-                                <option value="prepaid">Prepaid</option>
-                                <option value="any">Any</option>
-                            </select>
-                        </Field>
-                    </FormSection>
+                {/* Sidebar Intelligence */}
+                <div className="xl:col-span-4 space-y-8">
+                    <div className="glass-card p-6 bg-sky-500/5 relative overflow-hidden group">
+                        <div className="absolute -right-4 -top-4 w-20 h-20 bg-sky-500/10 rounded-full blur-2xl group-hover:bg-sky-500/20 transition-all" />
 
-                    <FormSection title="Status">
-                        <Field label="Review Status">
-                            <select value={form.reviewStatus || 'pending'} onChange={e => set('reviewStatus', e.target.value)} className="input">
-                                <option value="pending">Pending Review</option>
-                                <option value="approved">Approved (Active)</option>
-                                <option value="rejected">Rejected (Inactive)</option>
-                            </select>
-                        </Field>
-                        <Field label="Booking Required">
-                            <Toggle value={form.bookingRequired} onChange={v => set('bookingRequired', v)} />
-                        </Field>
-                    </FormSection>
+                        <div className="flex items-center gap-3 mb-6">
+                            <Sparkles className="text-sky-400 animate-pulse" size={20} />
+                            <h3 className="text-[10px] font-black text-white uppercase tracking-[0.2em]">Artificial Intelligence</h3>
+                        </div>
 
-                    <FormSection title="Admin Notes">
-                        <textarea value={form.editNotes || ''} onChange={e => set('editNotes', e.target.value)}
-                            rows={3} placeholder="Internal notes..."
-                            className="input resize-none w-full" />
-                    </FormSection>
+                        {validationLoading ? (
+                            <div className="py-12 flex flex-col items-center justify-center gap-4 text-slate-500">
+                                <RefreshCw className="animate-spin text-sky-500" size={32} />
+                                <span className="text-[10px] font-black uppercase tracking-[0.3em] animate-pulse">Scanning Data...</span>
+                            </div>
+                        ) : validation?.issues?.length > 0 ? (
+                            <div className="space-y-4">
+                                <div className="text-[10px] text-amber-500 font-black uppercase tracking-widest mb-2 flex items-center gap-2">
+                                    <AlertCircle size={10} /> Discrepancies Found
+                                </div>
+                                {validation.issues.map((issue, i) => (
+                                    <div key={i} className="p-4 bg-amber-500/5 border border-amber-500/20 rounded-2xl text-xs text-amber-200/90 leading-relaxed font-medium">
+                                        {issue}
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="p-6 bg-emerald-500/5 border border-emerald-500/20 rounded-2xl flex flex-col items-center text-center gap-4">
+                                <div className="w-12 h-12 bg-emerald-500/10 rounded-full flex items-center justify-center border border-emerald-500/20">
+                                    <CheckCircle size={24} className="text-emerald-500" />
+                                </div>
+                                <div className="space-y-1">
+                                    <h4 className="text-xs font-black text-emerald-400 uppercase tracking-widest">Integrity Verified</h4>
+                                    <p className="text-[10px] text-slate-500 font-medium">No structural drift detected from raw source.</p>
+                                </div>
+                            </div>
+                        )}
+                    </div>
 
-                    {/* Source link */}
-                    {offer?.rawData && (
-                        <FormSection title="Source Data">
-                            <p className="text-xs text-slate-500">Scraped at: {offer.scrapedAt ? new Date(offer.scrapedAt).toLocaleString() : 'N/A'}</p>
-                            <p className="text-xs text-slate-500">ID: <span className="font-mono">{offer.unique_id}</span></p>
-                        </FormSection>
-                    )}
+                    <div className="glass-card p-6">
+                        <div className="flex items-center gap-3 mb-6 border-b border-white/5 pb-4">
+                            <Globe className="text-sky-400" size={18} />
+                            <h3 className="text-[10px] font-black text-white uppercase tracking-[0.2em]">Platform Context</h3>
+                        </div>
+                        <div className="space-y-5">
+                            <div className="flex justify-between items-center bg-white/2 p-3 rounded-xl border border-white/5">
+                                <span className="text-[9px] text-slate-500 font-black uppercase tracking-widest">Source Entity</span>
+                                <span className="text-sky-400 font-black text-xs uppercase">{form.source}</span>
+                            </div>
+                            <div className="flex justify-between items-center bg-white/2 p-3 rounded-xl border border-white/5">
+                                <span className="text-[9px] text-slate-500 font-black uppercase tracking-widest">Lifecycle</span>
+                                <span className={`text-[10px] font-black uppercase p-1 px-2 rounded ${form.reviewStatus === 'approved' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-400'
+                                    }`}>
+                                    {form.reviewStatus?.replace(/_/g, ' ')}
+                                </span>
+                            </div>
+                            <div className="flex justify-between items-center bg-white/2 p-3 rounded-xl border border-white/5">
+                                <span className="text-[9px] text-slate-500 font-black uppercase tracking-widest">Production Ready</span>
+                                <span className={`text-[10px] font-black uppercase ${form.isInProduction ? 'text-emerald-400' : 'text-slate-700'}`}>
+                                    {form.isInProduction ? 'Active' : 'Offline'}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button
+                        onClick={handleDelete}
+                        disabled={deleting}
+                        className="w-full py-4 glass-card border-rose-500/20 bg-rose-500/5 text-rose-500 font-black uppercase tracking-[0.2em] text-[10px] hover:bg-rose-500/10 transition-all flex items-center justify-center gap-3"
+                    >
+                        {deleting ? <RefreshCw className="animate-spin" size={14} /> : <Trash2 size={14} />}
+                        Permanent Archive
+                    </button>
                 </div>
             </div>
-
-            <style jsx>{`
-        .input {
-          width: 100%;
-          border: 1px solid #e2e8f0;
-          border-radius: 6px;
-          padding: 8px 12px;
-          font-size: 14px;
-          outline: none;
-          transition: box-shadow 0.15s;
-          background: white;
-        }
-        .input:focus {
-          box-shadow: 0 0 0 2px #10b981;
-          border-color: transparent;
-        }
-      `}</style>
         </div>
-    );
-}
-
-function FormSection({ title, children }) {
-    return (
-        <div className="bg-white rounded-lg border border-slate-200 p-5">
-            <h3 className="text-sm font-semibold text-slate-800 mb-4 pb-3 border-b border-slate-100">{title}</h3>
-            <div className="space-y-4">{children}</div>
-        </div>
-    );
-}
-
-function Field({ label, hint, error, children }) {
-    return (
-        <div>
-            <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">{label}</label>
-            {children}
-            {error && <p className="text-xs text-red-500 mt-1 flex items-center gap-1"><AlertCircle size={11} />{error}</p>}
-            {hint && <p className="text-xs text-slate-400 mt-1">{hint}</p>}
-        </div>
-    );
-}
-
-function Toggle({ value, onChange }) {
-    return (
-        <button type="button" onClick={() => onChange(!value)}
-            className={`relative w-10 h-6 rounded-full transition-colors ${value ? 'bg-emerald-500' : 'bg-slate-300'}`}>
-            <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all ${value ? 'left-5' : 'left-1'}`} />
-        </button>
     );
 }

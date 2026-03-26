@@ -1,5 +1,6 @@
-import prisma from '@/lib/prisma';
+import prisma from '@/lib/prisma.mjs';
 import { NextResponse } from 'next/server';
+import { ensureValidationJobTable, scheduleOfferValidation } from '@/lib/validation-queue.mjs';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,7 +22,7 @@ export async function GET(request, { params }) {
     }
 }
 
-// PUT /api/offers/[id] — update offer
+// PUT /api/offers/[id] - update offer
 export async function PUT(request, { params }) {
     try {
         const body = await request.json();
@@ -29,8 +30,24 @@ export async function PUT(request, { params }) {
             title, description, merchantName, category, cardType,
             discountPercentage, discountDescription, applicableCards,
             validFrom, validTo, reviewStatus, bookingRequired,
-            daysApplicable, editNotes, source,
+            daysApplicable, editNotes, source, isInProduction,
         } = body;
+
+        const statusData = {};
+        if (reviewStatus !== undefined) {
+            statusData.reviewStatus = reviewStatus;
+            if (isInProduction !== undefined) {
+                statusData.isInProduction = Boolean(isInProduction);
+            } else if (reviewStatus === 'approved') {
+                statusData.isInProduction = true;
+                statusData.pushedToDbAt = new Date();
+            } else if (reviewStatus === 'rejected') {
+                statusData.isInProduction = false;
+                statusData.pushedToDbAt = null;
+            }
+        } else if (isInProduction !== undefined) {
+            statusData.isInProduction = Boolean(isInProduction);
+        }
 
         const updated = await prisma.offer.update({
             where: { id: params.id },
@@ -45,14 +62,31 @@ export async function PUT(request, { params }) {
                 ...(applicableCards !== undefined && { applicableCards }),
                 ...(validFrom !== undefined && { validFrom: validFrom ? new Date(validFrom) : null }),
                 ...(validTo !== undefined && { validTo: validTo ? new Date(validTo) : null }),
-                ...(reviewStatus !== undefined && { reviewStatus }),
                 ...(bookingRequired !== undefined && { bookingRequired }),
                 ...(daysApplicable !== undefined && { daysApplicable }),
                 ...(editNotes !== undefined && { editNotes }),
                 ...(source !== undefined && { source }),
+                ...statusData,
                 editedAt: new Date(),
             },
+            include: {
+                rawData: true,
+            },
         });
+
+        try {
+            await ensureValidationJobTable();
+            await scheduleOfferValidation({
+                prisma,
+                offer: updated,
+                rawData: updated.rawData,
+                reason: 'manual_update',
+                priority: 50,
+            });
+        } catch (validationError) {
+            console.warn('PUT offer validation queue warning:', validationError.message);
+        }
+
         return NextResponse.json(updated);
     } catch (error) {
         console.error('PUT offer error:', error);

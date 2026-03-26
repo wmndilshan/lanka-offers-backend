@@ -21,33 +21,11 @@ export async function POST(request) {
     let args = [];
 
     if (action === 'scrape') {
-      if (bank === 'all') {
-        scriptPath = path.join(rootDir, 'run-all.js');
-      } else {
-        // Map bank names to their actual scraper files (with version numbers)
-        const scraperFiles = {
-          'hnb': 'hnb-5.js',
-          'boc': 'boc-5.js',
-          'ndb': 'ndb-2.js',
-          'peoples': 'people-3.js',
-          'dfcc': 'dfcc.js',
-          'seylan': 'seylan.js',
-          'sampath': 'sampath.js'
-        };
-
-        const scraperFile = scraperFiles[bank.toLowerCase()];
-        if (!scraperFile) {
-          return NextResponse.json(
-            { success: false, error: `No scraper found for bank: ${bank}` },
-            { status: 404 }
-          );
-        }
-
-        scriptPath = path.join(rootDir, scraperFile);
-      }
+      scriptPath = path.join(rootDir, 'scripts', 'run-bank-scraper.js');
+      args = [`--bank=${bank.toLowerCase()}`];
     } else if (action === 'geocode') {
       scriptPath = path.join(rootDir, 'geo', 'index.js');
-      args = [`--bank=${bank}`];
+      args = [`--bank=${bank.toLowerCase()}`];
     } else {
       return NextResponse.json(
         { success: false, error: 'Invalid action. Use "scrape" or "geocode"' },

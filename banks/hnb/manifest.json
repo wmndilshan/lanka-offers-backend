@@ -1,0 +1,6 @@
+{
+  "bank": "hnb",
+  "active": "hnb-9.js",
+  "structuredOutput": "hnb_all_v9.json",
+  "geoOutput": "hnb_geo.json"
+}

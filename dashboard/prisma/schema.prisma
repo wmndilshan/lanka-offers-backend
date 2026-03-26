@@ -61,6 +61,7 @@ model Offer {
   // Relations
   locations Location[] // One-to-many: an offer can have multiple locations
   rawData   RawData? // One-to-one: link to raw scraped data
+  validation OfferValidation? // One-to-one: LLM validation record
 
   // ═══════════════════════════════════════════════════════════════════
   // DAILY SYNC TRACKING FIELDS
@@ -202,6 +203,54 @@ model RawData {
   @@index([rawListItem], type: Gin) // Fast JSONB queries
   @@index([rawDetail], type: Gin) // Fast JSONB queries
   @@map("raw_data")
+}
+
+// ---------------------------------------------------------------------------
+// LLM VALIDATION CACHE + AUDIT
+// ---------------------------------------------------------------------------
+
+/// Cached LLM validations to avoid repeated calls for identical inputs
+model LlmValidationCache {
+  id           String   @id @default(cuid())
+  cacheKey     String   @unique @map("cache_key")
+  inputHash    String   @map("input_hash")
+  model        String?
+  promptVersion String? @map("prompt_version")
+
+  rawSnapshot  Json?    @map("raw_snapshot") @db.JsonB
+  ruleCandidate Json?   @map("rule_candidate") @db.JsonB
+  llmCandidate  Json?   @map("llm_candidate") @db.JsonB
+  diff          Json?   @map("diff") @db.JsonB
+  issues        Json?   @map("issues") @db.JsonB
+
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@index([inputHash])
+  @@index([model])
+  @@map("llm_validation_cache")
+}
+
+/// Per-offer validation record pointing to cache key (admin review)
+model OfferValidation {
+  id        String  @id @default(cuid())
+  offerId   String  @unique @map("offer_id")
+  offer     Offer   @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  cacheKey  String  @map("cache_key")
+
+  status    String  @default("pending") // pending | accepted | rejected
+  summary   String? @db.Text
+
+  ruleCandidate Json? @map("rule_candidate") @db.JsonB
+  llmCandidate  Json? @map("llm_candidate") @db.JsonB
+  diff          Json? @map("diff") @db.JsonB
+  issues        Json? @map("issues") @db.JsonB
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@map("offer_validations")
 }
 
 // ═══════════════════════════════════════════════════════════════════

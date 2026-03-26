@@ -1,5 +1,5 @@
 
-import prisma from '@/lib/prisma';
+import prisma from '@/lib/prisma.mjs';
 import { NextResponse } from 'next/server';
 
 export async function GET(request) {
@@ -11,6 +11,7 @@ export async function GET(request) {
     const category = searchParams.get('category') || '';
     const source = searchParams.get('source') || '';
     const status = searchParams.get('status') || '';
+    const isInProduction = searchParams.get('is_in_production');
 
     const skip = (page - 1) * limit;
 
@@ -35,6 +36,10 @@ export async function GET(request) {
 
     if (status && status !== 'All') {
       where.reviewStatus = { equals: status.toLowerCase() };
+    }
+
+    if (isInProduction !== null && isInProduction !== undefined) {
+      where.isInProduction = isInProduction === 'true';
     }
 
     // Get total count for pagination

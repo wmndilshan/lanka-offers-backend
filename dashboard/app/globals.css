@@ -51,6 +51,17 @@
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.06);
   --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.08), 0 2px 4px -2px rgb(0 0 0 / 0.06);
+
+  /* Midnight Slate & Glassmorphism Tokens */
+  --slate-950: #020617;
+  --slate-900: #0f172a;
+  --slate-800: #1e293b;
+  --slate-700: #334155;
+  --glass-bg: rgba(255, 255, 255, 0.03);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  --accent-electric: #38bdf8;
+  --accent-emerald: #10b981;
 }
 
 /* ── Shared Components ─────────────────────────────── */
@@ -181,6 +192,39 @@
 
   .status-dot-danger {
     @apply status-dot bg-red-500;
+  }
+
+  /* ── Premium / Glass Components ──────────────────── */
+
+  .glass-card {
+    @apply border border-white/10 backdrop-blur-md bg-white/5 shadow-2xl rounded-2xl;
+  }
+
+  .midnight-surface {
+    @apply bg-[#020617] text-slate-100;
+  }
+
+  .interactive-glass {
+    @apply glass-card hover:bg-white/10 transition-all duration-300 cursor-pointer hover:-translate-y-1;
+  }
+
+  .glass-input {
+    @apply bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-slate-100 outline-none transition-all;
+    @apply focus:ring-2 focus:ring-sky-500/50 focus:bg-white/10;
+  }
+
+  .btn-premium {
+    @apply inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-semibold transition-all;
+    @apply shadow-premium-glow hover:shadow-premium-glow-hover;
+  }
+
+  .btn-premium-blue {
+    @apply btn-premium bg-sky-500 text-white hover:bg-sky-400;
+  }
+
+  .btn-premium-emerald {
+    @apply btn-premium bg-emerald-500 text-white hover:bg-emerald-400 hover:shadow-emerald-glow-hover;
+    @apply shadow-emerald-glow;
   }
 }
 

@@ -1,4 +1,4 @@
-import prisma from '@/lib/prisma';
+import prisma from '@/lib/prisma.mjs';
 import { NextResponse } from 'next/server';
 import { formatDistanceToNow, addWeeks, startOfWeek, endOfWeek, format } from 'date-fns';
 

@@ -1,7 +1,7 @@
 
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
-import prisma from '@/lib/prisma';
+import prisma from '@/lib/prisma.mjs';
 
 const openai = new OpenAI({
     baseURL: process.env.DEEPSEEK_API_URL || 'https://api.deepseek.com',

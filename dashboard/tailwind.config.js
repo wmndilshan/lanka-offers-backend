@@ -25,9 +25,11 @@ module.exports = {
         sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
       },
       boxShadow: {
-        'card': '0 1px 3px 0 rgb(0 0 0 / 0.08), 0 1px 2px -1px rgb(0 0 0 / 0.05)',
-        'card-hover': '0 4px 12px -2px rgb(0 0 0 / 0.1)',
         'inner-light': 'inset 0 1px 2px 0 rgb(0 0 0 / 0.04)',
+        'premium-glow': '0 0 20px rgba(56, 189, 248, 0.15)',
+        'premium-glow-hover': '0 0 30px rgba(56, 189, 248, 0.3)',
+        'emerald-glow': '0 0 20px rgba(16, 185, 129, 0.15)',
+        'emerald-glow-hover': '0 0 30px rgba(16, 185, 129, 0.3)',
       },
       borderRadius: {
         'xl': '12px',

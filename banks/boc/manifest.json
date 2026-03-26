@@ -1,0 +1,6 @@
+{
+  "bank": "boc",
+  "active": "boc-7.js",
+  "structuredOutput": "boc_all_v6.json",
+  "geoOutput": "boc_geo.json"
+}

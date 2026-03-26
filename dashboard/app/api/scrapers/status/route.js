@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import prisma from '@/lib/prisma';
+import prisma from '@/lib/prisma.mjs';
 import { formatDistanceToNow, addHours } from 'date-fns';
 
 export const dynamic = 'force-dynamic';

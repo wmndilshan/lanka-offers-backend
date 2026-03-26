@@ -1,7 +1,7 @@
 
 import { NextResponse } from 'next/server';
-import { suggestOfferImprovements } from '@/lib/ai';
-import prisma from '@/lib/prisma';
+import { suggestOfferImprovements } from '@/lib/ai.mjs';
+import prisma from '@/lib/prisma.mjs';
 
 export async function POST(request) {
     try {

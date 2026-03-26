@@ -38,7 +38,27 @@ function looksLikeAddress(text) {
 class SampathAdapter {
   constructor() { this.bank = 'sampath'; }
 
-  getDefaultInputFile() { return './sampath_offers_detailed.json'; }
+  getDefaultInputFile() {
+    const candidates = [
+      './output/sampath_all_v6.json',
+      './output/sampath_all_v5.json',
+      './sampath_offers_detailed.json'
+    ];
+    for (const filePath of candidates) {
+      if (!fs.existsSync(filePath)) continue;
+      try {
+        const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+        const offers = Array.isArray(data) ? data : (data.offers || (data.categories ? [] : []));
+        const count = Array.isArray(offers) ? offers.length : 0;
+        if (count > 0 || filePath.endsWith('sampath_offers_detailed.json')) {
+          return filePath;
+        }
+      } catch (_) {
+        // ignore parse errors and continue
+      }
+    }
+    return './sampath_offers_detailed.json';
+  }
 
   loadOffers(inputFile) {
     const data = JSON.parse(fs.readFileSync(inputFile, 'utf8'));
@@ -59,7 +79,7 @@ class SampathAdapter {
   }
 
   extractLocationData(offer) {
-    const name = stripHtml(offer.company_name || '');
+    const name = stripHtml(offer.company_name || offer.merchant_name || '');
     const city = offer.city || '';
     const ec = offer.eligible_cards || [];
 
@@ -97,12 +117,17 @@ class SampathAdapter {
 
     // Generate unique_id matching sampath-5.js pattern
     const crypto = require('crypto');
-    const hashInput = ['sampath', name, city, offer._category || '', offer.short_discount || ''].join('|').toLowerCase().trim();
-    const hash = crypto.createHash('sha256').update(hashInput).digest('hex');
-    const slug = (name || 'offer').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').substring(0, 20);
+    let offerId = offer.unique_id || offer.id || '';
+    if (!offerId) {
+      const hashInput = ['sampath', name, city, offer._category || offer.category || '', offer.short_discount || offer.discount || '']
+        .join('|').toLowerCase().trim();
+      const hash = crypto.createHash('sha256').update(hashInput).digest('hex');
+      const slug = (name || 'offer').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').substring(0, 20);
+      offerId = `sampath_${hash.substring(0, 12)}_${slug}`;
+    }
 
     return {
-      offer_id: `sampath_${hash.substring(0, 12)}_${slug}`,
+      offer_id: offerId,
       merchant_name: name,
       city: city,
       location: '',
@@ -123,7 +148,7 @@ class SampathAdapter {
 class HNBAdapter {
   constructor() { this.bank = 'hnb'; }
 
-  getDefaultInputFile() { return './output/hnb_all_v5.json'; }
+  getDefaultInputFile() { return './output/hnb_all_v6.json'; }
 
   loadOffers(inputFile) {
     const data = JSON.parse(fs.readFileSync(inputFile, 'utf8'));
@@ -171,7 +196,7 @@ class HNBAdapter {
 class BOCAdapter {
   constructor() { this.bank = 'boc'; }
 
-  getDefaultInputFile() { return './output/boc_all_v5.json'; }
+  getDefaultInputFile() { return './output/boc_all_v6.json'; }
 
   loadOffers(inputFile) {
     const data = JSON.parse(fs.readFileSync(inputFile, 'utf8'));

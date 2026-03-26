@@ -1,5 +1,6 @@
-import prisma from '@/lib/prisma';
+import prisma from '@/lib/prisma.mjs';
 import { NextResponse } from 'next/server';
+import { ensureValidationJobTable, scheduleOfferValidation } from '@/lib/validation-queue.mjs';
 
 export const dynamic = 'force-dynamic';
 
@@ -39,7 +40,23 @@ export async function POST(request) {
                 editNotes,
                 editedAt: new Date(),
             },
+            include: {
+                rawData: true,
+            },
         });
+
+        try {
+            await ensureValidationJobTable();
+            await scheduleOfferValidation({
+                prisma,
+                offer: created,
+                rawData: created.rawData,
+                reason: 'manual_create',
+                priority: 50,
+            });
+        } catch (validationError) {
+            console.warn('POST offer validation queue warning:', validationError.message);
+        }
 
         return NextResponse.json(created, { status: 201 });
     } catch (error) {

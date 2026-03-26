@@ -1,5 +1,4 @@
-
-import prisma from '@/lib/prisma';
+import prisma from '@/lib/prisma.mjs';
 import { NextResponse } from 'next/server';
 
 export async function POST(request) {
@@ -15,7 +14,6 @@ export async function POST(request) {
             return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
         }
 
-        // Handle delete
         if (action === 'delete') {
             await prisma.offer.deleteMany({
                 where: { id: { in: ids } }
@@ -23,19 +21,24 @@ export async function POST(request) {
             return NextResponse.json({ message: `Successfully deleted ${ids.length} offers` });
         }
 
-        // Handle status update
-        const newStatus = action === 'approve' ? 'approved' : 'rejected';
+        const data = action === 'approve'
+            ? {
+                reviewStatus: 'approved',
+                isInProduction: true,
+                pushedToDbAt: new Date(),
+            }
+            : {
+                reviewStatus: 'rejected',
+                isInProduction: false,
+                pushedToDbAt: null,
+            };
 
         await prisma.offer.updateMany({
             where: { id: { in: ids } },
-            data: {
-                reviewStatus: newStatus,
-                pushedToDbAt: new Date() // Mark the time they were "pushed" to production status
-            }
+            data,
         });
 
         return NextResponse.json({ message: `Successfully ${action}d ${ids.length} offers` });
-
     } catch (error) {
         console.error('Bulk API Error:', error);
         return NextResponse.json(

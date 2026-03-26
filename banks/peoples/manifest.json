@@ -1,0 +1,6 @@
+{
+  "bank": "peoples",
+  "active": "people-5.js",
+  "structuredOutput": "peoples_all_v4.json",
+  "geoOutput": "peoples_geo.json"
+}

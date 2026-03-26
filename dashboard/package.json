@@ -17,7 +17,10 @@
     "cleanup:stats": "node scripts/cleanup.js --stats",
     "scheduler": "node scripts/scheduler.js",
     "scheduler:now": "node scripts/scheduler.js --run-now",
-    "import": "node scripts/import-data.js"
+    "import": "node scripts/import-data.js",
+    "validation:queue:setup": "node scripts/setup-validation-jobs.mjs",
+    "validation:queue:work": "node scripts/process-validation-jobs.mjs",
+    "validation:queue:enqueue": "node scripts/enqueue-validation-jobs.mjs"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

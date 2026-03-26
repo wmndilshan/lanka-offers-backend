@@ -26,6 +26,7 @@ const { GeoCache, Geocoder, ApiTracker } = require('./geocoder');
 const { getAdapter, listBanks } = require('./adapters');
 const { classify, LOC_TYPES } = require('./branch-parser');
 const { createLogger } = require('../lib/logger');
+const { listBanksByCapability, resolveOutputPath } = require('../lib/bank-registry');
 const log = createLogger('geo');
 
 const CACHE_DIR = path.join(__dirname, '..', 'cache_geo');
@@ -61,8 +62,8 @@ function parseArgs() {
 // ─── Process a single bank ──────────────────────────────────────────────────
 async function processBank(bankName, opts, cache, geocoder) {
   const adapter = getAdapter(bankName);
-  const inputFile = opts.input || adapter.getDefaultInputFile();
-  const outputFile = opts.output || `./output/${bankName}_geo.json`;
+  const inputFile = opts.input || resolveOutputPath(bankName, 'structured', path.join(__dirname, '..'));
+  const outputFile = opts.output || resolveOutputPath(bankName, 'geo', path.join(__dirname, '..'));
 
   log.info('Geocoder', `Processing bank: ${bankName}`, { bank: bankName, input: inputFile });
 
@@ -88,10 +89,11 @@ async function processBank(bankName, opts, cache, geocoder) {
     typeCounts[classification.type]++;
 
     const progress = `[${processed}/${offers.length}]`;
+    const safeName = (locData.merchant_name || '').substring(0, 30);
 
     if (opts.dryRun) {
       const addr = classification.addresses.length > 0 ? classification.addresses[0].substring(0, 60) : classification.chainQuery || '(none)';
-      console.log(`  ${progress} ${classification.type.padEnd(7)} ${locData.merchant_name.substring(0, 30).padEnd(32)} ${addr}`);
+      console.log(`  ${progress} ${classification.type.padEnd(7)} ${safeName.padEnd(32)} ${addr}`);
       results.push({
         offer_id: locData.offer_id,
         merchant_name: locData.merchant_name,
@@ -108,7 +110,7 @@ async function processBank(bankName, opts, cache, geocoder) {
     switch (classification.type) {
       case LOC_TYPES.SINGLE: {
         const addr = classification.addresses[0];
-        console.log(`  ${progress} SINGLE  ${locData.merchant_name.substring(0, 30).padEnd(32)} → ${addr.substring(0, 50)}`);
+        console.log(`  ${progress} SINGLE  ${safeName.padEnd(32)} → ${addr.substring(0, 50)}`);
         const result = await geocoder.geocodeAddress(addr);
         locations.push({ source: 'geocoding_api', ...result });
         break;
@@ -116,9 +118,10 @@ async function processBank(bankName, opts, cache, geocoder) {
 
       case LOC_TYPES.LISTED: {
         const addrs = classification.addresses;
-        console.log(`  ${progress} LISTED  ${locData.merchant_name.substring(0, 30).padEnd(32)} → ${addrs.length} branches`);
+        console.log(`  ${progress} LISTED  ${safeName.padEnd(32)} → ${addrs.length} branches`);
+        const batch = await geocoder.geocodeBatch(addrs);
         for (const addr of addrs) {
-          const result = await geocoder.geocodeAddress(addr);
+          const result = batch.get(addr);
           locations.push({ source: 'geocoding_api', branch_name: addr, ...result });
         }
         break;
@@ -126,10 +129,10 @@ async function processBank(bankName, opts, cache, geocoder) {
 
       case LOC_TYPES.CHAIN: {
         if (opts.skipChains) {
-          console.log(`  ${progress} CHAIN   ${locData.merchant_name.substring(0, 30).padEnd(32)} → SKIPPED`);
+          console.log(`  ${progress} CHAIN   ${safeName.padEnd(32)} → SKIPPED`);
         } else {
           const query = classification.chainQuery;
-          console.log(`  ${progress} CHAIN   ${locData.merchant_name.substring(0, 30).padEnd(32)} → searching: ${query}`);
+          console.log(`  ${progress} CHAIN   ${safeName.padEnd(32)} → searching: ${query}`);
           const branches = await geocoder.findChainBranches(query);
           branches.forEach(b => {
             locations.push({ source: 'places_text_search', ...b });
@@ -140,11 +143,11 @@ async function processBank(bankName, opts, cache, geocoder) {
       }
 
       case LOC_TYPES.ONLINE:
-        console.log(`  ${progress} ONLINE  ${locData.merchant_name.substring(0, 30)}`);
+        console.log(`  ${progress} ONLINE  ${safeName}`);
         break;
 
       case LOC_TYPES.NONE:
-        console.log(`  ${progress} NONE    ${locData.merchant_name.substring(0, 30)}`);
+        console.log(`  ${progress} NONE    ${safeName}`);
         break;
     }
 
@@ -157,6 +160,35 @@ async function processBank(bankName, opts, cache, geocoder) {
   }
 
   // ── Save output ───────────────────────────────────────────────────────
+  const dedupedMap = new Map();
+  let duplicateOfferRows = 0;
+  for (const row of results) {
+    const key = row.offer_id || '';
+    if (!key) continue;
+    const existing = dedupedMap.get(key);
+    if (!existing) {
+      dedupedMap.set(key, row);
+      continue;
+    }
+    duplicateOfferRows++;
+    if (!existing.locations) existing.locations = [];
+    if (row.locations && row.locations.length) {
+      existing.locations.push(...row.locations);
+      const seen = new Set();
+      existing.locations = existing.locations.filter(loc => {
+        const locKey = [
+          loc.place_id || '',
+          loc.latitude ?? '',
+          loc.longitude ?? '',
+          loc.formatted_address || ''
+        ].join('|');
+        if (seen.has(locKey)) return false;
+        seen.add(locKey);
+        return true;
+      });
+    }
+  }
+  const dedupedResults = [...dedupedMap.values()];
   const stats = geocoder ? geocoder.getStats() : {};
   const output = {
     metadata: {
@@ -164,12 +196,13 @@ async function processBank(bankName, opts, cache, geocoder) {
       geocoded_at: new Date().toISOString(),
       total_offers: offers.length,
       location_types: typeCounts,
-      geocoded_count: results.filter(r => r.locations.length > 0).length,
-      total_locations: results.reduce((sum, r) => sum + r.locations.length, 0),
+      geocoded_count: dedupedResults.filter(r => r.locations.length > 0).length,
+      total_locations: dedupedResults.reduce((sum, r) => sum + r.locations.length, 0),
+      duplicate_offer_rows_removed: duplicateOfferRows,
       api_stats: stats,
       dry_run: opts.dryRun
     },
-    offers: results
+    offers: dedupedResults
   };
 
   if (!fs.existsSync('./output')) fs.mkdirSync('./output', { recursive: true });
@@ -200,14 +233,14 @@ async function main() {
     console.log(`  Places searches:   ${s.places_cached}`);
     console.log('');
     console.log(tracker.getReport());
-    console.log(`\n  Available banks: ${listBanks().join(', ')}`);
+    console.log(`\n  Available banks: ${listBanksByCapability('geocode').join(', ')}`);
     return;
   }
 
   // ── Validate ────────────────────────────────────────────────────────
   if (!opts.bank) {
     console.error('\n  ❌ --bank=<name> required');
-    console.error(`     Available: ${listBanks().join(', ')}, all`);
+    console.error(`     Available: ${listBanksByCapability('geocode').join(', ')}, all`);
     console.error('\n  Usage:');
     console.error('     node geo/index.js --bank=sampath --google-api-key=YOUR_KEY');
     console.error('     node geo/index.js --bank=all --google-api-key=YOUR_KEY');
@@ -242,7 +275,7 @@ async function main() {
   }
 
   const startTime = Date.now();
-  const banks = opts.bank === 'all' ? listBanks() : [opts.bank];
+  const banks = opts.bank === 'all' ? listBanksByCapability('geocode') : [opts.bank];
 
   console.log(`\n  Banks: ${banks.join(', ')}`);
   console.log(`  Mode: ${opts.dryRun ? 'DRY RUN (no API calls)' : 'LIVE'}`);
@@ -311,3 +344,4 @@ if (require.main === module) {
 }
 
 module.exports = { processBank, parseArgs };
+

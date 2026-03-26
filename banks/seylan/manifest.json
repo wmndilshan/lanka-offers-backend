@@ -1,0 +1,6 @@
+{
+  "bank": "seylan",
+  "active": "seylan-4.js",
+  "structuredOutput": "seylan_all_v3.json",
+  "geoOutput": "seylan_geo.json"
+}

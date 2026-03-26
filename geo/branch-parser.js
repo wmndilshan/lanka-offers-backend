@@ -24,7 +24,15 @@ function classify(locData) {
   const name = (merchant_name || '').trim();
 
   // If adapter already parsed branches, use them
-  if (branches && branches.length > 1) {
+  if (branches && branches.length >= 1) {
+    if (branches.length === 1) {
+      return {
+        type: LOC_TYPES.SINGLE,
+        addresses: branches,
+        chainQuery: null,
+        merchantForSearch: name
+      };
+    }
     return {
       type: LOC_TYPES.LISTED,
       addresses: branches,
