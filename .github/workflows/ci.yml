@@ -48,6 +48,6 @@ jobs:
 
       - name: Dashboard lint
         run: |
-          npm install --no-save eslint eslint-config-next
+          npm install --no-save eslint@8.57.0 eslint-config-next@14.1.0
           npm run lint
         working-directory: dashboard
