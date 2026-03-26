@@ -52,12 +52,16 @@ app.use((error, _req, res, _next) => {
   res.status(500).json({ error: 'Internal Server Error', message: error.message });
 });
 
-const server = app.listen(config.port, () => {
-  log.success('Server', `Backend listening on port ${config.port}`);
-});
+let server = null;
 
 async function gracefulShutdown(signal) {
   log.warn('Server', `Received ${signal}. Shutting down`);
+  if (!server) {
+    await pool.end();
+    process.exit(0);
+    return;
+  }
+
   server.close(async (error) => {
     if (error) {
       log.error('Server', 'Error while closing server', { message: error.message });
@@ -74,4 +78,19 @@ async function gracefulShutdown(signal) {
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 
+function startServer() {
+  if (server) return server;
+
+  server = app.listen(config.port, () => {
+    log.success('Server', `Backend listening on port ${config.port}`);
+  });
+
+  return server;
+}
+
+if (require.main === module) {
+  startServer();
+}
+
 module.exports = app;
+module.exports.startServer = startServer;
