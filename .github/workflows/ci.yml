@@ -12,6 +12,10 @@ jobs:
     env:
       CI: true
       PUPPETEER_SKIP_DOWNLOAD: "true"
+      DATABASE_URL: ${{ secrets.DATABASE_URL || 'postgresql://ci:ci@localhost:5432/ci' }}
+      DIRECT_URL: ${{ secrets.DIRECT_URL }}
+      DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+      DEEPSEEK_API_URL: ${{ secrets.DEEPSEEK_API_URL }}
 
     steps:
       - name: Checkout
@@ -41,8 +45,6 @@ jobs:
       - name: Backend check
         run: npm run check
         working-directory: backend
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL || 'postgresql://ci:ci@localhost:5432/ci' }}
 
       - name: Dashboard lint
         run: npm run lint
