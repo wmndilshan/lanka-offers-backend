@@ -47,5 +47,7 @@ jobs:
         working-directory: backend
 
       - name: Dashboard lint
-        run: npm run lint
+        run: |
+          npm install --no-save eslint eslint-config-next
+          npm run lint
         working-directory: dashboard
