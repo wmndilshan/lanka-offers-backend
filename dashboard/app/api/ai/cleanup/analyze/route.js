@@ -2,13 +2,18 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import prisma from '@/lib/prisma.mjs';
+import { requireAdminKey } from '@/lib/dashboard-auth.mjs';
 
 const openai = new OpenAI({
     baseURL: process.env.DEEPSEEK_API_URL || 'https://api.deepseek.com',
     apiKey: process.env.DEEPSEEK_API_KEY,
 });
 
+const DEFAULT_MODEL = process.env.DEEPSEEK_MODEL || 'deepseek-chat';
+
 export async function GET(request) {
+    const authError = requireAdminKey(request);
+    if (authError) return authError;
     try {
         const { searchParams } = new URL(request.url);
         const type = searchParams.get('type') || 'merchantName'; // merchantName or category
@@ -56,7 +61,7 @@ export async function GET(request) {
                 { role: "system", content: "You are a helpful data cleaning assistant that outputs only valid JSON." },
                 { role: "user", content: prompt }
             ],
-            model: "deepseek-coder",
+            model: DEFAULT_MODEL,
             response_format: { type: "json_object" },
             temperature: 0.1,
         });

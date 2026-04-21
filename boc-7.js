@@ -25,6 +25,7 @@ const fs = require('fs');
 const path = require('path');
 const { normalizeValidity } = require('./lib/period-normalize');
 const PeriodEngine = require('./lib/period-engine');
+const AddressEngine = require('./lib/address-engine');
 const crypto = require('crypto');
 const { createLogger } = require('./lib/logger');
 const log = createLogger('boc');
@@ -136,19 +137,19 @@ async function sleep(ms) {
 // ─── Unique ID Generation (UNCHANGED from v5 - stable!) ────────────────────
 
 function generateUniqueOfferId(offer) {
-  const components = [
-    'boc',
-    offer.url || '',
-    offer.title || '',
-    offer.expirationDate || '',
-    offer.location || ''
-  ];
-  const hash = crypto.createHash('sha256')
-    .update(components.join('|').toLowerCase().trim())
-    .digest('hex');
+  // Use only the URL slug — the bank's own stable page identifier.
+  // title/expirationDate/location are volatile and caused duplicate rows when
+  // a bank updated offer wording between scrapes.
   const urlMatch = offer.url ? offer.url.match(/\/([^/]+)\/product$/) : null;
-  const urlId = urlMatch ? urlMatch[1].substring(0, 15) : 'offer';
-  return `boc_${hash.substring(0, 12)}_${urlId}`;
+  const urlId = urlMatch ? urlMatch[1] : null;
+  if (urlId) {
+    return `boc_${urlId}`;
+  }
+  // Fallback: hash of URL only (no title/dates) when slug pattern doesn't match.
+  const hash = crypto.createHash('sha256')
+    .update(('boc|' + (offer.url || '')).toLowerCase().trim())
+    .digest('hex');
+  return `boc_${hash.substring(0, 16)}`;
 }
 
 // ─── Enhanced Contact & Location Parsing (NEW in v6) ────────────────────────
@@ -471,6 +472,7 @@ class BOCOffer {
       name: rawOffer.title,
       full_address: rawOffer.fullAddress || null,
       location_name: rawOffer.location || rawOffer.title,
+      addresses: rawOffer.addresses || [],
       contact_numbers: rawOffer.contactNumbers || [],
       primary_contact: rawOffer.contactNumbers?.[0] || null
     };
@@ -533,13 +535,20 @@ async function scrapeOfferDetail(offerUrl, index, total) {
       if (text && text.length > 0) description.push(text);
     });
 
-    // ENHANCED v6: Parse location and contacts using new functions
-    const fullAddress = parseLocation(description);
+    // ENHANCED v6: Parse location and contacts using new functions and AddressEngine
+    const initialLocation = parseLocation(description);
     const contactNumbers = parseContactNumbers(description);
 
     // Fallback location from card listing
     const locationMatch = $('.location-name, .product-detail .location-name').first().text();
-    const location = locationMatch || title;
+    const listingLocation = locationMatch || title;
+
+    // Use AddressEngine for multi-location extraction
+    const rawAddressText = (initialLocation || '') + ' ' + description.join(' ') + ' ' + (listingLocation || '');
+    const extractedAddresses = AddressEngine.extract(rawAddressText, title);
+    const fullAddress = extractedAddresses[0] || initialLocation;
+    const location = extractedAddresses[0] ? extractedAddresses[0].split(',')[0].trim() : listingLocation;
+
 
     const rawOffer = {
       url: offerUrl,
@@ -548,9 +557,11 @@ async function scrapeOfferDetail(offerUrl, index, total) {
       expirationDate: expireText,
       imageUrl,
       fullAddress,
+      addresses: extractedAddresses,
       contactNumbers,
       location,
       description,
+
       scraped_at: new Date().toISOString(),
       from_cache: fromCache,
       geocoding: null,

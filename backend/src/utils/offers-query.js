@@ -88,7 +88,9 @@ function computeWindow(preset, fromDate, toDate) {
   return { start: today, end: null };
 }
 
-function parseOffersQuery(qs) {
+function parseOffersQuery(qs, options = {}) {
+  const publicCatalog = options.publicCatalog === true;
+
   const page = parseInteger(qs.page, 'page', { min: 1, fallback: 1 });
   const limit = parseInteger(qs.limit, 'limit', { min: 1, max: 100, fallback: 20 });
   const lat = parseFloatValue(qs.lat, 'lat', { min: -90, max: 90, fallback: null });
@@ -115,46 +117,65 @@ function parseOffersQuery(qs) {
     bank: parseCsv(qs.bank, (v) => v.toUpperCase()),
     category: parseCsv(qs.category),
     cardType: parseCsv(qs.card_type, (v) => v.toLowerCase()),
+    merchant: (qs.merchant || '').trim(),
     q: (qs.q || '').trim(),
-    reviewStatus: parseCsv(qs.review_status),
-    isInProduction: qs.is_in_production === undefined ? null : qs.is_in_production === 'true',
-    status: qs.status || 'active',
+    reviewStatus: publicCatalog ? [] : parseCsv(qs.review_status),
+    isInProduction: publicCatalog ? null : (qs.is_in_production === undefined ? null : qs.is_in_production === 'true'),
+    status: publicCatalog ? 'active' : (qs.status || 'active'),
     sort,
     datePreset,
     window: computeWindow(datePreset, qs.from_date, qs.to_date),
   };
 }
 
-function buildWhere(parsed, params, alias = 'o') {
+/**
+ * Public catalog: only human-approved or AI-approved rows that are in production and active.
+ * Query params cannot widen this (review_status / is_in_production / status are ignored when publicCatalog).
+ */
+function buildWhere(parsed, params, alias = 'o', options = {}) {
+  const publicCatalog = options.publicCatalog === true;
+
   const clauses = [
     `(${alias}.valid_from IS NULL OR ${alias}.valid_from <= $${params.push(parsed.window.end || parsed.window.start)})`,
     `(${alias}.valid_to IS NULL OR ${alias}.valid_to >= $${params.push(parsed.window.start)})`,
   ];
 
-  if (parsed.reviewStatus.length) {
+  if (publicCatalog) {
+    clauses.push(
+      `(${alias}.review_status = 'approved' OR ${alias}.review_status = 'approved_by_ai')`,
+    );
+    clauses.push(`${alias}.is_in_production = true`);
+    clauses.push(`${alias}.status = 'active'`);
+  } else if (parsed.reviewStatus.length) {
     clauses.push(`${alias}.review_status = ANY($${params.push(parsed.reviewStatus)})`);
   } else if (parsed.isInProduction === null) {
-    // Default for public API
     clauses.push(`${alias}.review_status = 'approved'`);
   }
 
-  if (parsed.isInProduction !== null) {
-    clauses.push(`${alias}.is_in_production = $${params.push(parsed.isInProduction)}`);
-  } else {
-    // Default for public API
-    clauses.push(`${alias}.is_in_production = true`);
-  }
+  if (!publicCatalog) {
+    if (parsed.isInProduction !== null) {
+      clauses.push(`${alias}.is_in_production = $${params.push(parsed.isInProduction)}`);
+    } else {
+      clauses.push(`${alias}.is_in_production = true`);
+    }
 
-  if (parsed.status) {
-    clauses.push(`${alias}.status = $${params.push(parsed.status)}`);
+    if (parsed.status) {
+      clauses.push(`${alias}.status = $${params.push(parsed.status)}`);
+    }
   }
 
   if (parsed.bank.length) clauses.push(`${alias}.source = ANY($${params.push(parsed.bank)})`);
   if (parsed.category.length) clauses.push(`${alias}.category = ANY($${params.push(parsed.category)})`);
   if (parsed.cardType.length) clauses.push(`LOWER(${alias}.card_type) = ANY($${params.push(parsed.cardType)})`);
 
+  if (parsed.merchant) {
+    // Exact case-insensitive match on merchant_name — use for "show all offers by this merchant"
+    clauses.push(`LOWER(COALESCE(${alias}.merchant_name, '')) = $${params.push(parsed.merchant.toLowerCase())}`);
+  }
+
   if (parsed.q) {
-    const like = `%${parsed.q.replace(/[%_]/g, '\\$&')}%`;
+    // Escape \, %, _ in that order so backslashes are doubled before % and _ are escaped.
+    const like = `%${parsed.q.replace(/\\/g, '\\\\').replace(/[%_]/g, '\\$&')}%`;
     const idx = params.push(like.toLowerCase());
     clauses.push(`(
       LOWER(${alias}.title) LIKE $${idx} ESCAPE '\\'
@@ -194,6 +215,11 @@ function mapOfferRow(row) {
     booking_required: row.booking_required,
     scraped_at: row.scraped_at,
     updated_at: row.updated_at,
+    // Total geocoded branches for this offer — lets mobile show "N locations" badge
+    // without a detail fetch. Null means location data hasn't been loaded yet.
+    location_count: row.location_count !== undefined && row.location_count !== null
+      ? Number(row.location_count)
+      : null,
     distance_meters: row.distance_meters === null || row.distance_meters === undefined ? null : Number(row.distance_meters),
     nearest_location: location,
   };

@@ -20,7 +20,8 @@
     "import": "node scripts/import-data.js",
     "validation:queue:setup": "node scripts/setup-validation-jobs.mjs",
     "validation:queue:work": "node scripts/process-validation-jobs.mjs",
-    "validation:queue:enqueue": "node scripts/enqueue-validation-jobs.mjs"
+    "validation:queue:enqueue": "node scripts/enqueue-validation-jobs.mjs",
+    "test:validation": "node scripts/test-validation-pipeline.mjs"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

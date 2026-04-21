@@ -46,6 +46,14 @@ jobs:
         run: npm run check
         working-directory: backend
 
+      - name: Backend public catalog SQL guard
+        run: npm run verify:public
+        working-directory: backend
+
+      - name: Dashboard validation pipeline tests
+        run: npm run test:validation
+        working-directory: dashboard
+
       - name: Dashboard lint
         run: |
           npm remove --no-save eslint eslint-config-next || true

@@ -17,6 +17,7 @@ const fs = require('fs');
 const path = require('path');
 const { normalizeValidity } = require('./lib/period-normalize');
 const PeriodEngine = require('./lib/period-engine');
+const AddressEngine = require('./lib/address-engine');
 const crypto = require('crypto');
 const https = require('https');
 const http = require('http');
@@ -109,7 +110,9 @@ function saveToCache(url, data, cacheDir = CONFIG.cacheDir) {
 // ─── Unique ID Generation ──────────────────────────────────────────────────
 
 function generateUniqueId(offer) {
-  const components = ['peoples', offer.detailPageUrl || '', offer.merchantName || '', offer.validityRaw || ''];
+  // Use detailPageUrl as the sole stable key — it's the bank's own canonical URL.
+  // validityRaw was removed: date text changes between scrapes and caused duplicate rows.
+  const components = ['peoples', offer.detailPageUrl || '', offer.merchantName || ''];
   const hash = crypto.createHash('sha256').update(components.join('|').toLowerCase().trim()).digest('hex');
   const slug = (offer.merchantName || 'offer').toLowerCase().replace(/[^a-z0-9]+/g, '-').substring(0, 20);
   return `peoples_${hash.substring(0, 12)}_${slug}`;
@@ -583,6 +586,12 @@ class PeoplesOffer {
     this.image_url = detailData?.imageUrl || listingData.imageUrl;
     this.location = detailData?.location || listingData.merchantName;
 
+    // Use AddressEngine for extraction
+    const rawAddressText = (this.location || '') + ' ' + (this.short_description || '') + ' ' + (this.terms.join(' ') || '');
+    this.addresses = AddressEngine.extract(rawAddressText, this.merchant_name);
+    this.location = this.addresses[0] || this.location || this.merchant_name;
+
+
     this.terms = detailData?.terms || [];
     this.terms_url = detailData?.termsUrl || '';
     this.pdf_terms = detailData?.pdfTerms || null;
@@ -612,6 +621,8 @@ class PeoplesOffer {
       short_description: this.short_description,
       image_url: this.image_url,
       location: this.location,
+      addresses: this.addresses,
+
       terms: this.terms,
       terms_url: this.terms_url,
       pdf_terms: this.pdf_terms,

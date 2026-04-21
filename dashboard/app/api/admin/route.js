@@ -1,10 +1,13 @@
 import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
+import { requireAdminKey } from '@/lib/dashboard-auth.mjs';
 
 const rootDir = path.join(process.cwd(), '..');
 
 export async function POST(request) {
+    const authError = requireAdminKey(request);
+    if (authError) return authError;
   try {
     const { operation } = await request.json();
 

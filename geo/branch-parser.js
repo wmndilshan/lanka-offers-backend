@@ -41,7 +41,26 @@ function classify(locData) {
     };
   }
 
+  // CHAIN: known chain with no specific address (generic "Merchant Name, Sri Lanka")
+  // Or "All Outlets" explicitly mentioned
+  const chain = matchChain(name);
+  if (chain) {
+    // If it's a chain but we have specific listed branches, keep it as LISTED
+    // (handled by the branches check above)
+    
+    // Only use CHAIN (Places search) when we have NO specific address.
+    // If addresses.length === 1, that is a known specific location — use SINGLE, not CHAIN.
+    if (!address && !city && (!addresses || addresses.length === 0)) {
+      return { type: LOC_TYPES.CHAIN, addresses: [], chainQuery: chain.query, merchantForSearch: name };
+    }
+    
+    if (/all\s+(outlets?|branches)/i.test(location || '')) {
+       return { type: LOC_TYPES.CHAIN, addresses: [], chainQuery: chain.query, merchantForSearch: name };
+    }
+  }
+
   // ONLINE: URL as location or known online-only merchants
+
   if ((location || '').startsWith('http') || (name || '').startsWith('www.') ||
       /uber|daraz|pickme|food\s*panda|shopee/i.test(name)) {
     return { type: LOC_TYPES.ONLINE, addresses: [], chainQuery: null, merchantForSearch: name };

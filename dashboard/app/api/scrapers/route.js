@@ -1,8 +1,11 @@
 import { NextResponse } from 'next/server';
 import { spawn } from 'child_process';
 import path from 'path';
+import { requireAdminKey } from '@/lib/dashboard-auth.mjs';
 
 export async function POST(request) {
+    const authError = requireAdminKey(request);
+    if (authError) return authError;
   try {
     const body = await request.json();
     const { bank, action } = body;

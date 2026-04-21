@@ -1,7 +1,10 @@
 import prisma from '@/lib/prisma.mjs';
 import { NextResponse } from 'next/server';
+import { requireAdminKey } from '@/lib/dashboard-auth.mjs';
 
 export async function POST(request) {
+    const authError = requireAdminKey(request);
+    if (authError) return authError;
     try {
         const body = await request.json();
         const { ids, action } = body;

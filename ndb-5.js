@@ -18,6 +18,7 @@ const fs = require('fs');
 const path = require('path');
 const { normalizeValidity } = require('./lib/period-normalize');
 const PeriodEngine = require('./lib/period-engine');
+const AddressEngine = require('./lib/address-engine');
 const crypto = require('crypto');
 const https = require('https');
 const http = require('http');
@@ -503,6 +504,12 @@ class NDBOffer {
       || raw.phone || '';
     this.merchantLogo = raw.merchant?.logo || raw.merchantLogo || raw.images?.logo || '';
 
+    // Use AddressEngine for extraction
+    const rawAddressText = (this.merchantLocation || '') + ' ' + (raw.offer?.description || raw.offerDetails || '');
+    this.addresses = AddressEngine.extract(rawAddressText, this.merchantName);
+    this.merchantLocation = this.addresses[0] || this.merchantLocation || '';
+
+
     this.offerDescription = raw.offer?.description || raw.offerDetails || '';
     this.discount = raw.offer?.discount || null;
     this.minimumBill = raw.offer?.minimumBill || null;
@@ -532,6 +539,7 @@ class NDBOffer {
         name: this.merchantName,
         website: this.merchantWebsite,
         location: this.merchantLocation,
+        addresses: this.addresses,
         phone: this.merchantPhone,
         logo: this.merchantLogo
       },

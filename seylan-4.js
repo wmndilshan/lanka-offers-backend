@@ -17,6 +17,7 @@ const fs = require('fs');
 const path = require('path');
 const { normalizeValidity } = require('./lib/period-normalize');
 const PeriodEngine = require('./lib/period-engine');
+const AddressEngine = require('./lib/address-engine');
 const crypto = require('crypto');
 
 // ─── p-limit ───────────────────────────────────────────────────────────────
@@ -372,9 +373,15 @@ class SeylanOffer {
 
     this.merchantName = raw.title || '';
     this.description = raw.description || '';
-    this.address = raw.address || '';
+    this.addressRaw = raw.address || '';
     this.phone = raw.phone || '';
     this.validityRaw = raw.validity || '';
+
+    // Use AddressEngine for extraction
+    const rawAddressText = (this.addressRaw || '') + ' ' + (this.description || '');
+    this.addresses = AddressEngine.extract(rawAddressText, this.merchantName);
+    this.address = this.addresses[0] || this.addressRaw || '';
+
     this.imageUrl = raw.imageUrl || '';
     this.sourceUrl = raw.url || '';
     this.minTransaction = raw.minTransaction || null;
@@ -393,6 +400,7 @@ class SeylanOffer {
       merchant: {
         name: this.merchantName,
         address: this.address,
+        addresses: this.addresses,
         phone: this.phone
       },
       offer: {

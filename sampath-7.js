@@ -27,6 +27,7 @@ const fs = require('fs');
 const path = require('path');
 const { normalizeValidity } = require('./lib/period-normalize');
 const PeriodEngine = require('./lib/period-engine');
+const AddressEngine = require('./lib/address-engine');
 const crypto = require('crypto');
 const { createLogger } = require('./lib/logger');
 const log = createLogger('sampath');
@@ -505,8 +506,10 @@ class PeriodParser {
 // ─── SampathOffer v6 ────────────────────────────────────────────────────────
 class SampathOffer {
   constructor(raw, category, detailData = null) {
-    // Unique ID (UNCHANGED from v5 - stable across scrapes)
-    const hashInput = ['sampath', raw.company_name || '', raw.city || '', category || '', raw.short_discount || ''].join('|').toLowerCase().trim();
+    // Unique ID — stable identity: merchant + city + category only.
+    // short_discount was removed: promotional wording changes between scrapes and
+    // caused a new unique_id (and duplicate DB row) each time the bank updated text.
+    const hashInput = ['sampath', raw.company_name || '', raw.city || '', category || ''].join('|').toLowerCase().trim();
     const hash = crypto.createHash('sha256').update(hashInput).digest('hex');
     const slug = (raw.company_name || 'offer').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').substring(0, 20);
     this.unique_id = `sampath_${hash.substring(0, 12)}_${slug}`;
@@ -536,11 +539,16 @@ class SampathOffer {
     this.images.primary_image = this.images.api_image || (this.images.detail_images[0]?.url) || null;
 
     // Merchant info (ENHANCED in v6)
+    const merchantName = stripHtml(raw.company_name);
+    const rawAddressText = (detailData?.full_address || '') + ' ' + (raw.location || '') + ' ' + (stripHtml(raw.promotion_details) || '');
+    const extractedAddresses = AddressEngine.extract(rawAddressText, merchantName);
+
     this.merchant = {
-      name: stripHtml(raw.company_name),
+      name: merchantName,
       city: raw.city || '',
       location: raw.location || '',
-      full_address: detailData?.full_address || raw.location || '',
+      addresses: extractedAddresses,
+      full_address: extractedAddresses[0] || detailData?.full_address || raw.location || '',
       partner: detailData?.partner || null,
       contact_number: this._extractContact(raw),
       reservation_number: detailData?.reservation_number || null

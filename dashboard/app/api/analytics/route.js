@@ -17,12 +17,12 @@ export async function GET() {
             expiringIn7Days,
             latestOffer,
         ] = await Promise.all([
-            prisma.offer.count({ where: { reviewStatus: 'approved' } }),
+            prisma.offer.count({ where: { isInProduction: true, status: 'active' } }),
             prisma.offer.count({
-                where: { reviewStatus: 'approved', createdAt: { lte: oneWeekAgo } }
+                where: { isInProduction: true, status: 'active', createdAt: { lte: oneWeekAgo } }
             }),
             prisma.offer.count({
-                where: { reviewStatus: 'approved', validTo: { gte: now, lte: sevenDaysFromNow } }
+                where: { isInProduction: true, status: 'active', validTo: { gte: now, lte: sevenDaysFromNow } }
             }),
             prisma.offer.findFirst({
                 orderBy: { scrapedAt: 'desc' },
@@ -134,6 +134,23 @@ export async function GET() {
         return NextResponse.json({ summary, charts: { byCategory, byBank, byDiscount, expiryTimeline, topMerchants } });
     } catch (error) {
         console.error('Analytics error:', error);
-        return NextResponse.json({ error: 'Failed to fetch analytics' }, { status: 500 });
+        // Return empty structure if database fails
+        return NextResponse.json({ 
+            summary: {
+                totalActive: 0,
+                activeChange: 0,
+                uniqueMerchants: 0,
+                expiringIn7Days: 0,
+                banksTracked: 0,
+                lastScrapeRelative: 'No database connection',
+            },
+            charts: { 
+                byCategory: [], 
+                byBank: [], 
+                byDiscount: [], 
+                expiryTimeline: [], 
+                topMerchants: [] 
+            } 
+        });
     }
 }

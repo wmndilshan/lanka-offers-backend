@@ -35,7 +35,13 @@ export async function GET(request) {
     }
 
     if (status && status !== 'All') {
-      where.reviewStatus = { equals: status.toLowerCase() };
+      // Support comma-separated list (e.g. "pending,flagged,approved_by_ai")
+      const statuses = status.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+      if (statuses.length === 1) {
+        where.reviewStatus = statuses[0];
+      } else if (statuses.length > 1) {
+        where.reviewStatus = { in: statuses };
+      }
     }
 
     if (isInProduction !== null && isInProduction !== undefined) {

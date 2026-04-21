@@ -1,5 +1,10 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { buildValidationArtifacts, validateOfferWithPipeline } from '../lib/validation-pipeline.mjs';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 function clone(value) {
     return value === undefined ? undefined : JSON.parse(JSON.stringify(value));
@@ -54,6 +59,22 @@ function createPrismaMock() {
                 return clone(next);
             },
         },
+        offer: {
+            async update() {
+                return {};
+            },
+        },
+        location: {
+            async findMany() {
+                return [];
+            },
+            async deleteMany() {
+                return { count: 0 };
+            },
+            async createMany() {
+                return { count: 0 };
+            },
+        },
     };
 }
 
@@ -90,6 +111,20 @@ function makeRawData(overrides = {}) {
     };
 }
 
+async function testGoldenFixtureMissingTitle() {
+    const fixturePath = path.join(__dirname, '../test/fixtures/validation/missing-title.json');
+    const fixture = JSON.parse(fs.readFileSync(fixturePath, 'utf8'));
+    const { ruleIssues } = buildValidationArtifacts({
+        offer: fixture.offer,
+        rawData: fixture.rawData,
+    });
+    assert.deepEqual(
+        [...ruleIssues].sort(),
+        [...fixture.expectedRuleIssues].sort(),
+        'golden fixture rule issues should match',
+    );
+}
+
 async function testStableFingerprint() {
     const offer = makeOffer('a');
     const rawA = makeRawData({
@@ -118,7 +153,7 @@ async function testCacheReuseAcrossOffers() {
             candidate: ruleCandidate,
             issues: [],
             model: 'deepseek-coder',
-            promptVersion: 'v2',
+            promptVersion: 'v3',
         };
     };
 
@@ -127,6 +162,7 @@ async function testCacheReuseAcrossOffers() {
         offer: makeOffer('1', { unique_id: 'offer_one' }),
         rawData: makeRawData(),
         llmValidator,
+        forceLlm: true,
     });
     const second = await validateOfferWithPipeline({
         prisma,
@@ -155,7 +191,7 @@ async function testChangedInputResetsReviewState() {
             candidate: ruleCandidate,
             issues: [],
             model: 'deepseek-coder',
-            promptVersion: 'v2',
+            promptVersion: 'v3',
         };
     };
 
@@ -164,6 +200,7 @@ async function testChangedInputResetsReviewState() {
         offer: makeOffer('same'),
         rawData: makeRawData(),
         llmValidator,
+        forceLlm: true,
     });
 
     prisma.__state.offerValidationByOfferId.set('same', {
@@ -176,6 +213,7 @@ async function testChangedInputResetsReviewState() {
         offer: makeOffer('same', { discountDescription: '25% off room rates' }),
         rawData: makeRawData({ rawHtmlContent: '<div>Valid from 2026-03-01 to 2026-03-31, 25% off room rates.</div>' }),
         llmValidator,
+        forceLlm: true,
     });
 
     const validationRecord = prisma.__state.offerValidationByOfferId.get('same');
@@ -210,6 +248,7 @@ async function testNoApiKeyFallback() {
 }
 
 async function main() {
+    await testGoldenFixtureMissingTitle();
     await testStableFingerprint();
     await testCacheReuseAcrossOffers();
     await testChangedInputResetsReviewState();

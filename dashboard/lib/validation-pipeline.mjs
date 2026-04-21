@@ -2,7 +2,7 @@ import crypto from 'crypto';
 import { getAppLogger } from './app-logger.mjs';
 
 const PROMPT_VERSION = 'v3';
-const MODEL_NAME = 'deepseek-coder';
+const MODEL_NAME = process.env.DEEPSEEK_MODEL || 'deepseek-chat';
 const log = getAppLogger('validation');
 
 const MAX_STRING_LENGTH = 1200;
@@ -11,6 +11,8 @@ const MAX_ARRAY_ITEMS = 25;
 const MAX_OBJECT_KEYS = 50;
 const MAX_DEPTH = 5;
 
+// merchantLocations is LLM-only enrichment — not a scraped field, so never in the diff.
+// Including it would always produce a spurious diff (rule=null vs llm=[]) and block auto-approval.
 const RULE_FIELDS = [
     'title',
     'merchantName',
@@ -21,7 +23,6 @@ const RULE_FIELDS = [
     'validFrom',
     'validTo',
     'daysApplicable',
-    'merchantLocations',
 ];
 
 function stableStringify(value) {
@@ -45,6 +46,16 @@ function mergeIssues(...groups) {
         if (typeof issue === 'string' && issue.trim()) merged.add(issue.trim());
     });
     return [...merged];
+}
+
+/** Deterministic ~2% sample for quality monitoring (same offer always same decision). */
+function shouldSampleLlm(uniqueId) {
+    if (!uniqueId || typeof uniqueId !== 'string') return false;
+    let h = 0;
+    for (let i = 0; i < uniqueId.length; i += 1) {
+        h = Math.imul(31, h) + uniqueId.charCodeAt(i) | 0;
+    }
+    return Math.abs(h) % 100 < 2;
 }
 
 function normalizeText(value) {
@@ -137,12 +148,20 @@ function normalizeRuleCandidate(offer, rawData) {
 }
 
 function createRawSnapshot(rawData) {
+    const rd = rawData || {};
+    const evidence = rd._evidence && typeof rd._evidence === 'object'
+        ? sanitizeForValidation(rd._evidence)
+        : null;
     return {
-        rawValidFrom: limitString(rawData?.rawValidFrom || rawData?._raw_validFrom, 128),
-        rawValidUntil: limitString(rawData?.rawValidUntil || rawData?._raw_validUntil, 128),
-        rawListItem: sanitizeForValidation(rawData?.rawListItem || rawData?._raw_list_item || null),
-        rawDetail: sanitizeForValidation(rawData?.rawDetail || rawData?._raw_detail || null),
-        rawHtmlContent: limitString(rawData?.rawHtmlContent || rawData?._raw_htmlContent || null, MAX_HTML_LENGTH),
+        rawValidFrom: limitString(rd.rawValidFrom || rd._raw_validFrom, 128),
+        rawValidUntil: limitString(rd.rawValidUntil || rd._raw_validUntil, 128),
+        /** Full validity phrase from scrapers when available (helps LLM vs rules). */
+        rawValidityText: limitString(rd.rawValidityText || rd.raw_validity_text, MAX_STRING_LENGTH),
+        rawDiscountPhrase: limitString(rd.rawDiscountPhrase || rd.raw_discount_phrase, MAX_STRING_LENGTH),
+        rawListItem: sanitizeForValidation(rd.rawListItem || rd._raw_list_item || null),
+        rawDetail: sanitizeForValidation(rd.rawDetail || rd._raw_detail || null),
+        rawHtmlContent: limitString(rd.rawHtmlContent || rd._raw_htmlContent || null, MAX_HTML_LENGTH),
+        ...(evidence ? { evidence } : {}),
     };
 }
 
@@ -156,6 +175,19 @@ function detectRuleIssues(candidate) {
         issues.push('INVALID_DATE_RANGE');
     }
     return issues;
+}
+
+/** Map LLM fieldVerdicts with verdict "unsupported" into issue tokens (blocks auto approved_by_ai). */
+function issuesFromFieldVerdicts(fieldVerdicts) {
+    if (!fieldVerdicts || typeof fieldVerdicts !== 'object') return [];
+    const out = [];
+    for (const [field, val] of Object.entries(fieldVerdicts)) {
+        if (val && typeof val === 'object' && String(val.verdict).toLowerCase() === 'unsupported') {
+            const safe = String(field).replace(/[^a-z0-9]+/gi, '_').toUpperCase() || 'FIELD';
+            out.push(`FIELD_UNSUPPORTED_${safe}`);
+        }
+    }
+    return out;
 }
 
 function buildDiff(ruleCandidate, llmCandidate) {
@@ -239,7 +271,11 @@ export async function validateOfferWithPipeline({
     } = buildValidationArtifacts({ offer, rawData });
 
     const hasApiKey = !!process.env.DEEPSEEK_API_KEY;
-    const shouldCallLlm = hasApiKey;
+    const shouldCallLlm = hasApiKey && (
+        forceLlm
+        || ruleIssues.length > 0
+        || shouldSampleLlm(offer.unique_id)
+    );
 
     const existingValidation = await prisma.offerValidation.findUnique({
         where: { offerId: offer.id },
@@ -260,10 +296,12 @@ export async function validateOfferWithPipeline({
             const llmResponse = await llmValidator(offer, rawSnapshot, ruleCandidate);
             const llmCandidate = sanitizeLlmCandidate(llmResponse?.candidate);
             const llmIssues = Array.isArray(llmResponse?.issues) ? llmResponse.issues : [];
+            const verdictIssues = issuesFromFieldVerdicts(llmResponse?.fieldVerdicts);
             const diff = buildDiff(ruleCandidate, llmCandidate);
             const finalCacheIssues = mergeIssues(
                 ruleIssues,
                 llmIssues,
+                verdictIssues,
                 !llmCandidate ? ['LLM_EMPTY_CANDIDATE'] : [],
             );
 
@@ -300,20 +338,33 @@ export async function validateOfferWithPipeline({
         }
     } else if (!cache && !hasApiKey) {
         fallbackIssues = mergeIssues(ruleIssues, ['LLM_SKIPPED_NO_API_KEY']);
+    } else if (!cache && hasApiKey && !shouldCallLlm) {
+        fallbackIssues = [...ruleIssues];
     }
 
     const finalDiff = cache?.diff || [];
     const finalIssues = cache?.issues || fallbackIssues || ruleIssues;
     const llmCandidate = cache?.llmCandidate || null;
 
-    // Determine new review status based on validation result
+    // Determine new review status based on validation result.
+    // I-2: pipeline must never overwrite a human decision ('approved' or 'rejected').
+    // Only pipeline-owned statuses ('pending', 'approved_by_ai', 'flagged') are mutable here.
+    const PIPELINE_OWNED_STATUSES = new Set(['pending', 'approved_by_ai', 'flagged']);
     let newReviewStatus = offer.reviewStatus;
-    if (finalDiff.length > 0 || finalIssues.some(i => i.includes('FAIL') || i.includes('MISSING'))) {
-        newReviewStatus = 'flagged';
-    } else if (finalIssues.length === 0 && finalDiff.length === 0 && !cacheHit) {
-        // If it was just validated and is perfect, we can auto-accept if it was pending
-        if (offer.reviewStatus === 'pending') {
-            newReviewStatus = 'approved_by_ai';
+    if (PIPELINE_OWNED_STATUSES.has(offer.reviewStatus)) {
+        if (
+            finalDiff.length > 0
+            || finalIssues.some((i) => i.includes('FAIL')
+                || i.includes('MISSING')
+                || i.includes('FIELD_UNSUPPORTED'))
+        ) {
+            newReviewStatus = 'flagged';
+        } else if (finalIssues.length === 0 && finalDiff.length === 0) {
+            // Auto-approve whether the result came from LLM or a warm cache hit.
+            // A cached clean result is still a clean result.
+            if (offer.reviewStatus === 'pending') {
+                newReviewStatus = 'approved_by_ai';
+            }
         }
     }
 
@@ -361,27 +412,48 @@ export async function validateOfferWithPipeline({
         cacheHit,
     });
 
-    // Sync Locations from LLM Candidate
+    // Sync Locations from LLM Candidate (never wipe geocoded / Places-backed rows)
     if (llmCandidate?.merchantLocations?.length > 0) {
-        // Delete old locations for this offer to ensure fresh state from LLM
-        await prisma.location.deleteMany({ where: { offerId: offer.id } });
+        const existing = await prisma.location.findMany({
+            where: { offerId: offer.id },
+            select: {
+                placeId: true,
+                latitude: true,
+                longitude: true,
+                source: true,
+            },
+        });
+        const hasProtected = existing.some((l) => (
+            l.placeId != null
+            || (l.latitude != null
+                && l.longitude != null
+                && l.source
+                && l.source !== 'llm_extraction')
+        ));
 
-        // Create new ones
-        await prisma.location.createMany({
-            data: llmCandidate.merchantLocations.map(loc => ({
+        if (hasProtected) {
+            log.warn('Pipeline', 'Skipping LLM location sync — protected geocoded rows exist', {
                 offerId: offer.id,
-                branchName: loc,
-                formattedAddress: loc,
-                locationType: 'LISTED',
-                source: 'llm_extraction',
-                success: true
-            }))
-        });
+                uniqueId: offer.unique_id,
+            });
+        } else {
+            await prisma.location.deleteMany({ where: { offerId: offer.id } });
+            await prisma.location.createMany({
+                data: llmCandidate.merchantLocations.map((loc) => ({
+                    offerId: offer.id,
+                    branchName: loc,
+                    formattedAddress: loc,
+                    locationType: 'LISTED',
+                    source: 'llm_extraction',
+                    success: true,
+                })),
+            });
 
-        log.info('Pipeline', 'Locations synced from LLM', {
-            offerId: offer.id,
-            count: llmCandidate.merchantLocations.length
-        });
+            log.info('Pipeline', 'Locations synced from LLM', {
+                offerId: offer.id,
+                count: llmCandidate.merchantLocations.length,
+            });
+        }
     }
 
     return {

@@ -2,8 +2,11 @@
 import { NextResponse } from 'next/server';
 import { suggestOfferImprovements } from '@/lib/ai.mjs';
 import prisma from '@/lib/prisma.mjs';
+import { requireAdminKey } from '@/lib/dashboard-auth.mjs';
 
 export async function POST(request) {
+    const authError = requireAdminKey(request);
+    if (authError) return authError;
     try {
         const body = await request.json();
         const { offerId, rawText } = body;

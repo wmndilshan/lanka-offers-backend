@@ -39,10 +39,15 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 // GeoCache — persistent file cache, never expires
 // ═══════════════════════════════════════════════════════════════════════════
 
+// Places results expire after this many days (chain branches open/close over time).
+// Geocoding results never expire — addresses don't move.
+const PLACES_TTL_DAYS = 60;
+
 class GeoCache {
-  constructor(cacheDir = './cache_geo') {
+  constructor(cacheDir = './cache_geo', { placesTtlDays = PLACES_TTL_DAYS } = {}) {
     this.geocodeDir = path.join(cacheDir, 'geocode');
     this.placesDir = path.join(cacheDir, 'places');
+    this.placesTtlMs = placesTtlDays * 24 * 60 * 60 * 1000;
     [this.geocodeDir, this.placesDir].forEach(d => {
       if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true });
     });
@@ -65,11 +70,18 @@ class GeoCache {
     fs.writeFileSync(p, JSON.stringify({ address, result, cached_at: new Date().toISOString() }, null, 2));
   }
 
-  // ── Places Text Search cache ─────────────────────────────────────────
+  // ── Places Text Search cache (60-day TTL) ────────────────────────────
   getPlaces(query) {
     const p = path.join(this.placesDir, `${this._hash(query)}.json`);
     if (!fs.existsSync(p)) return null;
-    try { return JSON.parse(fs.readFileSync(p, 'utf8')).results; }
+    try {
+      const stored = JSON.parse(fs.readFileSync(p, 'utf8'));
+      if (stored.cached_at) {
+        const age = Date.now() - new Date(stored.cached_at).getTime();
+        if (age > this.placesTtlMs) return null; // expired — force refresh
+      }
+      return stored.results;
+    }
     catch (e) { return null; }
   }
 

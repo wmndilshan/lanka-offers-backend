@@ -17,7 +17,11 @@ function loadAllOffers() {
 
     const files = fs.readdirSync(outputDir);
     const jsonFiles = files.filter(file =>
-      file.endsWith('.json') && !file.includes('_geo')
+      // Only include files that are likely to be main offer lists
+      (file.endsWith('.json') && (file.includes('_all_') || file.includes('_offers'))) &&
+      !file.includes('_geo') &&
+      !file.includes('_raw') &&
+      !file.includes('_validity')
     );
 
     const allOffers = [];
@@ -28,8 +32,22 @@ function loadAllOffers() {
         const content = fs.readFileSync(filePath, 'utf-8');
         const data = JSON.parse(content);
 
-        // Extract bank name from filename (e.g., hnb_all_v5.json -> hnb)
-        let bank = file.replace('.json', '').replace(/_all.*/, '').replace(/_offers.*/, '');
+        // Extract bank name from filename (e.g., hnb_all_v9.json -> hnb)
+        // More robust extraction: get the first part before the first underscore
+        let bank = file.split('_')[0].toLowerCase();
+        
+        // Manual overrides for known banks if needed
+        const bankMap = {
+          'peoples': "PEOPLE'S",
+          'sampath': 'SAMPATH',
+          'seylan': 'SEYLAN',
+          'boc': 'BOC',
+          'hnb': 'HNB',
+          'ndb': 'NDB',
+          'dfcc': 'DFCC',
+          'pabc': 'PAN ASIA',
+        };
+        const normalizedBank = bankMap[bank] || bank.toUpperCase();
 
         // Handle different JSON structures
         let offers = [];
@@ -48,7 +66,7 @@ function loadAllOffers() {
         // Normalize field names and add bank field
         const offersWithBank = offers.map(offer => ({
           ...offer,
-          bank: bank.toUpperCase(),
+          bank: normalizedBank,
 
           // Merchant name - normalize to 'merchant' for table
           merchant: offer.structured_data?.merchant_name ||

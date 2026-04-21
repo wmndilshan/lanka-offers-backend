@@ -1,11 +1,14 @@
 import prisma from '@/lib/prisma.mjs';
 import { NextResponse } from 'next/server';
 import { ensureValidationJobTable, scheduleOfferValidation } from '@/lib/validation-queue.mjs';
+import { requireAdminKey } from '@/lib/dashboard-auth.mjs';
 
 export const dynamic = 'force-dynamic';
 
 // POST /api/offers — create a new offer manually
 export async function POST(request) {
+    const authError = requireAdminKey(request);
+    if (authError) return authError;
     try {
         const body = await request.json();
         const {

@@ -1,19 +1,24 @@
 ﻿const express = require('express');
 const { pool } = require('../db');
+const { config } = require('../utils/config');
 const { parseOffersQuery, buildWhere, mapOfferRow } = require('../utils/offers-query');
 
 const router = express.Router();
 
+function safeServerMessage(err) {
+  return config.nodeEnv === 'production' ? 'An unexpected error occurred' : err.message;
+}
+
 router.get('/', async (req, res) => {
   let parsed;
   try {
-    parsed = parseOffersQuery(req.query);
+    parsed = parseOffersQuery(req.query, { publicCatalog: true });
   } catch (error) {
     return res.status(400).json({ error: 'Bad Request', message: error.message });
   }
 
   const params = [];
-  const whereSql = buildWhere(parsed, params, 'o');
+  const whereSql = buildWhere(parsed, params, 'o', { publicCatalog: true });
 
   try {
     let countSql = `
@@ -149,6 +154,10 @@ router.get('/', async (req, res) => {
         o.booking_required,
         o.scraped_at,
         o.updated_at,
+        (SELECT COUNT(*)::int FROM locations lc
+           WHERE lc.offer_id = o.id
+             AND lc.latitude IS NOT NULL
+             AND lc.longitude IS NOT NULL) AS location_count,
         nearest.distance_meters,
         nearest.location_json
       FROM offers o
@@ -167,6 +176,7 @@ router.get('/', async (req, res) => {
         bank: parsed.bank,
         category: parsed.category,
         card_type: parsed.cardType,
+        merchant: parsed.merchant || null,
         q: parsed.q,
         date_preset: parsed.datePreset,
         from: parsed.window.start,
@@ -184,16 +194,19 @@ router.get('/', async (req, res) => {
       offers: dataResult.rows.map(mapOfferRow),
     });
   } catch (error) {
-    return res.status(500).json({ error: 'Failed to fetch offers', message: error.message });
+    return res.status(500).json({ error: 'Failed to fetch offers', message: safeServerMessage(error) });
   }
 });
+
+const publicCatalogWhere =
+  "(review_status IN ('approved','approved_by_ai')) AND is_in_production=true AND status='active'";
 
 router.get('/filters', async (_req, res) => {
   try {
     const [banks, categories, cardTypes] = await Promise.all([
-      pool.query("SELECT DISTINCT source FROM offers WHERE review_status='approved' AND is_in_production=true AND status='active' ORDER BY source"),
-      pool.query("SELECT DISTINCT category FROM offers WHERE review_status='approved' AND is_in_production=true AND status='active' AND category IS NOT NULL AND category <> '' ORDER BY category"),
-      pool.query("SELECT DISTINCT card_type FROM offers WHERE review_status='approved' AND is_in_production=true AND status='active' AND card_type IS NOT NULL AND card_type <> '' ORDER BY card_type"),
+      pool.query(`SELECT DISTINCT source FROM offers WHERE ${publicCatalogWhere} ORDER BY source`),
+      pool.query(`SELECT DISTINCT category FROM offers WHERE ${publicCatalogWhere} AND category IS NOT NULL AND category <> '' ORDER BY category`),
+      pool.query(`SELECT DISTINCT card_type FROM offers WHERE ${publicCatalogWhere} AND card_type IS NOT NULL AND card_type <> '' ORDER BY card_type`),
     ]);
 
     return res.json({
@@ -203,13 +216,13 @@ router.get('/filters', async (_req, res) => {
       date_presets: ['active', 'today', 'tomorrow', 'this_week', 'this_month', 'custom'],
     });
   } catch (error) {
-    return res.status(500).json({ error: 'Failed to fetch filters', message: error.message });
+    return res.status(500).json({ error: 'Failed to fetch filters', message: safeServerMessage(error) });
   }
 });
 
 router.get('/stats', async (_req, res) => {
   try {
-    const baseWhere = "review_status='approved' AND is_in_production=true AND status='active'";
+    const baseWhere = publicCatalogWhere;
 
     const [totals, banks, categories, cardTypes] = await Promise.all([
       pool.query(`SELECT COUNT(*)::int AS total FROM offers WHERE ${baseWhere}`),
@@ -248,119 +261,126 @@ router.get('/stats', async (_req, res) => {
       by_card_type: cardTypes.rows,
     });
   } catch (error) {
-    return res.status(500).json({ error: 'Failed to fetch stats', message: error.message });
+    return res.status(500).json({ error: 'Failed to fetch stats', message: safeServerMessage(error) });
   }
 });
 
-// ---------------------------------------------------------------------------
-// ADMIN ROUTES (Level 6: Production Push Lifecycle)
-// ---------------------------------------------------------------------------
-
-/**
- * PATCH /offers/:uniqueId
- * Allows admin to manually correct/modify an offer before publishing.
- */
-router.patch('/:uniqueId', async (req, res) => {
-  const { uniqueId } = req.params;
-  const updates = req.body;
-
-  // Allowed fields for manual edit
-  const shadowFields = [
-    'title', 'merchant_name', 'category', 'card_type',
-    'discount_percentage', 'discount_description',
-    'valid_from', 'valid_to', 'booking_required'
-  ];
-
-  const setClauses = [];
-  const queryParams = [];
-
-  shadowFields.forEach((field) => {
-    if (updates[field] !== undefined) {
-      setClauses.push(`${field} = $${queryParams.push(updates[field])}`);
-    }
-  });
-
-  if (setClauses.length === 0) {
-    return res.status(400).json({ error: 'No valid fields for update' });
+router.get('/nearby', async (req, res) => {
+  // Requires lat + lng. Thin wrapper over GET /offers that enforces sort=distance
+  // and returns a proximity-first list. Registered before /:uniqueId to avoid param clash.
+  if (!req.query.lat || !req.query.lng) {
+    return res.status(400).json({ error: 'Bad Request', message: 'lat and lng are required' });
   }
 
-  // Also update metadata
-  setClauses.push(`updated_at = NOW()`);
-  setClauses.push(`edited_at = NOW()`);
-
-  const idIdx = queryParams.push(uniqueId);
-  const sql = `
-    UPDATE offers
-    SET ${setClauses.join(', ')}
-    WHERE unique_id = $${idIdx}
-    RETURNING *
-  `;
-
+  let parsed;
   try {
-    const result = await pool.query(sql, queryParams);
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Offer not found' });
-    }
-    return res.json(mapOfferRow(result.rows[0]));
+    parsed = parseOffersQuery({ sort: 'distance', ...req.query }, { publicCatalog: true });
   } catch (error) {
-    return res.status(500).json({ error: 'Failed to update offer', message: error.message });
+    return res.status(400).json({ error: 'Bad Request', message: error.message });
   }
-});
 
-/**
- * POST /offers/:uniqueId/publish
- * The "Final decision" made by admin. Pushes a draft/flagged offer to production.
- */
-router.post('/:uniqueId/publish', async (req, res) => {
-  const { uniqueId } = req.params;
+  const params = [];
+  const whereSql = buildWhere(parsed, params, 'o', { publicCatalog: true });
+
+  const lngIndex = params.push(parsed.lng);
+  const latIndex = params.push(parsed.lat);
+  const radiusIndex = params.push(parsed.radiusMeters);
 
   try {
+    const countResult = await pool.query(
+      `SELECT COUNT(*)::int AS total
+       FROM offers o
+       WHERE ${whereSql}
+         AND EXISTS (
+           SELECT 1 FROM locations l
+           WHERE l.offer_id = o.id
+             AND l.latitude IS NOT NULL AND l.longitude IS NOT NULL
+             AND ST_DWithin(
+               l.geography,
+               ST_SetSRID(ST_MakePoint($${lngIndex}, $${latIndex}), 4326)::geography,
+               $${radiusIndex}
+             )
+         )`,
+      params,
+    );
+    const total = countResult.rows[0]?.total || 0;
+
+    const dataParams = [...params];
+    const lngIdx2 = dataParams.push(parsed.lng);
+    const latIdx2 = dataParams.push(parsed.lat);
+    const radIdx2 = dataParams.push(parsed.radiusMeters);
+    const limitIndex = dataParams.push(parsed.limit);
+    const offsetIndex = dataParams.push(parsed.offset);
+
     const sql = `
-      UPDATE offers
-      SET
-        review_status = 'approved',
-        is_in_production = true,
-        pushed_to_db_at = NOW(),
-        updated_at = NOW()
-      WHERE unique_id = $1
-      RETURNING *
+      SELECT
+        o.id, o.unique_id, o.source, o.category, o.title,
+        o.merchant_name, o.card_type, o.discount_description,
+        o.discount_percentage, o.valid_from, o.valid_to,
+        o.applicable_cards, o.booking_required, o.scraped_at, o.updated_at,
+        (SELECT COUNT(*)::int FROM locations lc
+           WHERE lc.offer_id = o.id
+             AND lc.latitude IS NOT NULL
+             AND lc.longitude IS NOT NULL) AS location_count,
+        nearest.distance_meters,
+        nearest.location_json
+      FROM offers o
+      LEFT JOIN LATERAL (
+        SELECT
+          l.id,
+          l.formatted_address, l.latitude, l.longitude,
+          l.place_id, l.location_type, l.branch_name,
+          ST_Distance(
+            l.geography,
+            ST_SetSRID(ST_MakePoint($${lngIdx2}, $${latIdx2}), 4326)::geography
+          ) AS distance_meters,
+          jsonb_build_object(
+            'id', l.id,
+            'formatted_address', l.formatted_address,
+            'latitude', l.latitude,
+            'longitude', l.longitude,
+            'place_id', l.place_id,
+            'location_type', l.location_type,
+            'branch_name', l.branch_name
+          ) AS location_json
+        FROM locations l
+        WHERE l.offer_id = o.id
+          AND l.latitude IS NOT NULL AND l.longitude IS NOT NULL
+          AND ST_DWithin(
+            l.geography,
+            ST_SetSRID(ST_MakePoint($${lngIdx2}, $${latIdx2}), 4326)::geography,
+            $${radIdx2}
+          )
+        ORDER BY distance_meters ASC
+        LIMIT 1
+      ) nearest ON true
+      WHERE ${whereSql}
+        AND nearest.id IS NOT NULL
+      ORDER BY nearest.distance_meters ASC NULLS LAST
+      LIMIT $${limitIndex}
+      OFFSET $${offsetIndex}
     `;
 
-    const result = await pool.query(sql, [uniqueId]);
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Offer not found' });
-    }
-    return res.json({ message: 'Offer published successfully', offer: mapOfferRow(result.rows[0]) });
+    const dataResult = await pool.query(sql, dataParams);
+
+    return res.json({
+      filters: {
+        lat: parsed.lat,
+        lng: parsed.lng,
+        radius_meters: parsed.radiusMeters,
+        bank: parsed.bank,
+        category: parsed.category,
+      },
+      pagination: {
+        page: parsed.page,
+        limit: parsed.limit,
+        total,
+        total_pages: Math.ceil(total / parsed.limit),
+      },
+      offers: dataResult.rows.map(mapOfferRow),
+    });
   } catch (error) {
-    return res.status(500).json({ error: 'Failed to publish offer', message: error.message });
-  }
-});
-
-/**
- * POST /offers/:uniqueId/reject
- * Admin rejects an offer (wont be pushed to production).
- */
-router.post('/:uniqueId/reject', async (req, res) => {
-  const { uniqueId } = req.params;
-
-  try {
-    const sql = `
-      UPDATE offers
-      SET
-        review_status = 'rejected',
-        is_in_production = false,
-        updated_at = NOW()
-      WHERE unique_id = $1
-      RETURNING *
-    `;
-
-    const result = await pool.query(sql, [uniqueId]);
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Offer not found' });
-    }
-    return res.json({ message: 'Offer rejected', offer: mapOfferRow(result.rows[0]) });
-  } catch (error) {
-    return res.status(500).json({ error: 'Failed to reject offer', message: error.message });
+    return res.status(500).json({ error: 'Failed to fetch nearby offers', message: safeServerMessage(error) });
   }
 });
 
@@ -394,7 +414,7 @@ router.get('/:uniqueId', async (req, res) => {
           updated_at
         FROM offers
         WHERE unique_id = $1
-          AND review_status = 'approved'
+          AND review_status IN ('approved', 'approved_by_ai')
           AND is_in_production = true
           AND status = 'active'
         LIMIT 1
@@ -435,7 +455,7 @@ router.get('/:uniqueId', async (req, res) => {
       locations: locations.rows,
     });
   } catch (error) {
-    return res.status(500).json({ error: 'Failed to fetch offer', message: error.message });
+    return res.status(500).json({ error: 'Failed to fetch offer', message: safeServerMessage(error) });
   }
 });
 

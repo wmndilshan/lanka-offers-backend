@@ -2,11 +2,14 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import prisma from '@/lib/prisma.mjs';
+import { requireAdminKey } from '@/lib/dashboard-auth.mjs';
 
 const openai = new OpenAI({
     baseURL: process.env.DEEPSEEK_API_URL || 'https://api.deepseek.com',
     apiKey: process.env.DEEPSEEK_API_KEY,
 });
+
+const DEFAULT_MODEL = process.env.DEEPSEEK_MODEL || 'deepseek-chat';
 
 const SYSTEM_PROMPT = `
 You are a Database Assistant for an Offers Management System.
@@ -52,6 +55,9 @@ EXAMPLE: "Show me pending dining offers"
 `;
 
 export async function POST(request) {
+    const authError = requireAdminKey(request);
+    if (authError) return authError;
+
     try {
         const { message } = await request.json();
 
@@ -61,7 +67,7 @@ export async function POST(request) {
                 { role: "system", content: SYSTEM_PROMPT },
                 { role: "user", content: message }
             ],
-            model: "deepseek-coder",
+            model: DEFAULT_MODEL,
             response_format: { type: "json_object" },
             temperature: 0.1,
         });

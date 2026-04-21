@@ -350,6 +350,147 @@ class NDBAdapter {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// PABC ADAPTER
+// CSV: Merchant, Discount, Validity Date, Latitude, Longitude, Address, Description, Image URL
+// Already geocoded — extract the Address directly (geocoder will cache-hit or confirm).
+// ═══════════════════════════════════════════════════════════════════════════
+
+class PabcAdapter {
+  constructor() { this.bank = 'pabc'; }
+
+  getDefaultInputFile() {
+    const candidates = ['./pabc_offers.csv', './output/pabc_all.json'];
+    for (const f of candidates) {
+      if (fs.existsSync(f)) return f;
+    }
+    return './pabc_offers.csv';
+  }
+
+  loadOffers(inputFile) {
+    const raw = fs.readFileSync(inputFile, 'utf8');
+    const lines = raw.split('\n').filter(Boolean);
+    const headers = this._parseCsvLine(lines[0]);
+    return lines.slice(1).map(line => {
+      const values = this._parseCsvLine(line);
+      const obj = {};
+      headers.forEach((h, i) => { obj[h.trim()] = (values[i] || '').trim(); });
+      return obj;
+    }).filter(o => o.Merchant && o.Merchant.length > 0);
+  }
+
+  _parseCsvLine(line) {
+    const result = [];
+    let current = '';
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '"') {
+        inQuotes = !inQuotes;
+      } else if (ch === ',' && !inQuotes) {
+        result.push(current);
+        current = '';
+      } else {
+        current += ch;
+      }
+    }
+    result.push(current);
+    return result;
+  }
+
+  extractLocationData(offer) {
+    // Merchant name may contain the full offer description — trim to first 60 chars
+    // or stop at common separators like "when you pay", "on transactions"
+    let name = (offer.Merchant || '').trim();
+    const stopAt = /\bwhen\b|\bon transactions\b|\bfor all\b|\bat\b.*branch/i;
+    const stopMatch = name.match(stopAt);
+    if (stopMatch) name = name.slice(0, stopMatch.index).trim().replace(/[,\s]+$/, '');
+    name = name.slice(0, 80);
+
+    const address = (offer.Address || '').trim();
+    const addresses = address && address.toLowerCase() !== 'sri lanka' ? [address] : [];
+
+    const crypto = require('crypto');
+    const hashInput = ['pabc', name, address, offer.Discount || '', offer['Validity Date'] || '']
+      .join('|').toLowerCase();
+    const hash = crypto.createHash('sha256').update(hashInput).digest('hex');
+    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 20);
+    const offerId = `pabc_${hash.slice(0, 12)}_${slug}`;
+
+    return {
+      offer_id: offerId,
+      merchant_name: name,
+      city: null,
+      location: address,
+      address: null,
+      addresses,
+      branches: [],
+      phone: null,
+      promotion_details: offer.Description || null,
+    };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// DFCC ADAPTER
+// CSV: Category, Title, Offer, Card Type, Detail URL
+// No address data — relies entirely on known-chains matching for CHAIN type.
+// Blocked: scraper requires Puppeteer/Chrome for detailed pages.
+// ═══════════════════════════════════════════════════════════════════════════
+
+class DfccAdapter {
+  constructor() { this.bank = 'dfcc'; }
+
+  getDefaultInputFile() {
+    const candidates = ['./dfcc_promotions.csv', './output/dfcc_all.json'];
+    for (const f of candidates) {
+      if (fs.existsSync(f)) return f;
+    }
+    return './dfcc_promotions.csv';
+  }
+
+  loadOffers(inputFile) {
+    if (inputFile.endsWith('.json')) {
+      const data = JSON.parse(fs.readFileSync(inputFile, 'utf8'));
+      return data.offers || data;
+    }
+    // CSV: Category,Title,Offer,Card Type,Detail URL
+    const raw = fs.readFileSync(inputFile, 'utf8');
+    const lines = raw.split('\n').filter(Boolean);
+    const headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim());
+    return lines.slice(1).map(line => {
+      const values = line.match(/(".*?"|[^,]+)/g) || [];
+      const obj = {};
+      headers.forEach((h, i) => {
+        obj[h] = (values[i] || '').replace(/^"|"$/g, '').trim();
+      });
+      return obj;
+    }).filter(o => o.Title);
+  }
+
+  extractLocationData(offer) {
+    const name = (offer.Title || offer.merchant_name || '').trim();
+
+    const crypto = require('crypto');
+    const hashInput = ['dfcc', name, offer.Category || '', offer.Offer || ''].join('|').toLowerCase();
+    const hash = crypto.createHash('sha256').update(hashInput).digest('hex');
+    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 20);
+    const offerId = offer.unique_id || `dfcc_${hash.slice(0, 12)}_${slug}`;
+
+    return {
+      offer_id: offerId,
+      merchant_name: name,
+      city: null,
+      location: null,
+      address: null,
+      addresses: [],
+      branches: [],
+      phone: null,
+      promotion_details: offer.Offer || offer.description || null,
+    };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // Registry
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -359,7 +500,9 @@ const ADAPTERS = {
   boc: BOCAdapter,
   peoples: PeoplesAdapter,
   seylan: SeylanAdapter,
-  ndb: NDBAdapter
+  ndb: NDBAdapter,
+  pabc: PabcAdapter,
+  dfcc: DfccAdapter,
 };
 
 function getAdapter(bankName) {

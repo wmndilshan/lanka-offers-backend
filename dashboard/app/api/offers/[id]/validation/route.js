@@ -2,6 +2,7 @@ import prisma from '@/lib/prisma.mjs';
 import { NextResponse } from 'next/server';
 import { validateOfferWithPipeline } from '@/lib/validation-pipeline.mjs';
 import { getAppLogger } from '@/lib/app-logger.mjs';
+import { requireAdminKey } from '@/lib/dashboard-auth.mjs';
 
 export const dynamic = 'force-dynamic';
 const log = getAppLogger('validation-api');
@@ -48,6 +49,9 @@ export async function GET(request, { params }) {
 }
 
 export async function POST(request, { params }) {
+    const authError = requireAdminKey(request);
+    if (authError) return authError;
+
     try {
         const offer = await prisma.offer.findUnique({
             where: { id: params.id },

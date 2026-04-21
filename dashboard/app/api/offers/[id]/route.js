@@ -1,6 +1,7 @@
 import prisma from '@/lib/prisma.mjs';
 import { NextResponse } from 'next/server';
 import { ensureValidationJobTable, scheduleOfferValidation } from '@/lib/validation-queue.mjs';
+import { requireAdminKey } from '@/lib/dashboard-auth.mjs';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,6 +25,8 @@ export async function GET(request, { params }) {
 
 // PUT /api/offers/[id] - update offer
 export async function PUT(request, { params }) {
+    const authError = requireAdminKey(request);
+    if (authError) return authError;
     try {
         const body = await request.json();
         const {
@@ -96,6 +99,8 @@ export async function PUT(request, { params }) {
 
 // DELETE /api/offers/[id]
 export async function DELETE(request, { params }) {
+    const authError = requireAdminKey(request);
+    if (authError) return authError;
     try {
         await prisma.offer.delete({ where: { id: params.id } });
         return NextResponse.json({ success: true });

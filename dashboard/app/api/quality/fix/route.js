@@ -1,20 +1,26 @@
 import prisma from '@/lib/prisma.mjs';
 import { NextResponse } from 'next/server';
+import { requireAdminKey } from '@/lib/dashboard-auth.mjs';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(request) {
+    const authError = requireAdminKey(request);
+    if (authError) return authError;
+
     try {
         const { action } = await request.json();
         const now = new Date();
 
         if (action === 'deactivate_expired') {
-            // Update all expired offers -> set reviewStatus to 'rejected'
+            // Mark expired offers as status='expired' — does NOT touch reviewStatus.
+            // Changing reviewStatus to 'rejected' would violate I-2 by overwriting
+            // human curator decisions ('approved', 'rejected').
             const result = await prisma.offer.updateMany({
-                where: { validTo: { lt: now }, reviewStatus: { not: 'rejected' } },
-                data: { reviewStatus: 'rejected' },
+                where: { validTo: { lt: now }, status: { not: 'expired' } },
+                data: { status: 'expired', invalidatedAt: now },
             });
-            return NextResponse.json({ success: true, affected: result.count, message: `Deactivated ${result.count} expired offers` });
+            return NextResponse.json({ success: true, affected: result.count, message: `Marked ${result.count} expired offers as expired` });
         }
 
         if (action === 'regeocode_missing') {

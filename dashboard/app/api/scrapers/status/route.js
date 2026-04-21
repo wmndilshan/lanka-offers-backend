@@ -18,47 +18,53 @@ function deriveStatus(latestScrapedAt, errorCount) {
 
 export async function GET() {
     try {
-        const scraperData = await Promise.all(
-            BANKS.map(async (bank) => {
-                const bankKey = bank === "People's" ? 'peoples' : bank.toLowerCase().replace(/\s+/g, '_');
+        const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
-                // Get the latest scraped offer
-                const latest = await prisma.offer.findFirst({
-                    where: { source: { contains: bank.split(' ')[0], mode: 'insensitive' } },
-                    orderBy: { scrapedAt: 'desc' },
-                    select: { scrapedAt: true },
-                });
+        // 3 queries total instead of 24 (8 banks × 3)
+        const [latestPerBank, totalPerBank, newPerBank] = await Promise.all([
+            prisma.offer.groupBy({
+                by: ['source'],
+                _max: { scrapedAt: true },
+            }),
+            prisma.offer.groupBy({
+                by: ['source'],
+                _count: { id: true },
+            }),
+            prisma.offer.groupBy({
+                by: ['source'],
+                where: { createdAt: { gte: oneDayAgo } },
+                _count: { id: true },
+            }),
+        ]);
 
-                // Count all offers from this bank
-                const offersFound = await prisma.offer.count({
-                    where: { source: { contains: bank.split(' ')[0], mode: 'insensitive' } },
-                });
+        const latestMap = Object.fromEntries(latestPerBank.map(r => [r.source, r._max.scrapedAt]));
+        const totalMap = Object.fromEntries(totalPerBank.map(r => [r.source, r._count.id]));
+        const newMap = Object.fromEntries(newPerBank.map(r => [r.source, r._count.id]));
 
-                // Count offers added in last 24h (approximated as "new")
-                const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-                const offersNew = await prisma.offer.count({
-                    where: {
-                        source: { contains: bank.split(' ')[0], mode: 'insensitive' },
-                        createdAt: { gte: oneDayAgo },
-                    },
-                });
+        const scraperData = BANKS.map((bank) => {
+            const bankPrefix = bank.split(' ')[0];
+            // Match source case-insensitively by finding the key that starts with the prefix
+            const sourceKey = Object.keys(totalMap).find(
+                k => k.toLowerCase().startsWith(bankPrefix.toLowerCase())
+            ) || bank;
 
-                const status = deriveStatus(latest?.scrapedAt, 0);
+            const lastScrapedAt = latestMap[sourceKey] || null;
+            const offersFound = totalMap[sourceKey] || 0;
+            const offersNew = newMap[sourceKey] || 0;
 
-                return {
-                    bank,
-                    status,
-                    offersFound,
-                    offersNew,
-                    offersUpdated: 0,
-                    errors: 0,
-                    lastRun: latest?.scrapedAt
-                        ? formatDistanceToNow(new Date(latest.scrapedAt), { addSuffix: true })
-                        : 'Never',
-                    nextRun: 'Daily at 2:00 AM',
-                };
-            })
-        );
+            return {
+                bank,
+                status: deriveStatus(lastScrapedAt, 0),
+                offersFound,
+                offersNew,
+                offersUpdated: 0,
+                errors: 0,
+                lastRun: lastScrapedAt
+                    ? formatDistanceToNow(new Date(lastScrapedAt), { addSuffix: true })
+                    : 'Never',
+                nextRun: 'Daily at 2:00 AM',
+            };
+        });
 
         return NextResponse.json({ scrapers: scraperData });
     } catch (error) {

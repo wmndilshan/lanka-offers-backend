@@ -26,6 +26,7 @@ const crypto = require('crypto');
 const cheerio = require('cheerio');
 const { normalizeValidity } = require('./lib/period-normalize');
 const PeriodEngine = require('./lib/period-engine');
+const AddressEngine = require('./lib/address-engine');
 
 // ─── Configuration ───────────────────────────────────────────────────────────
 
@@ -1026,15 +1027,15 @@ class HNBOffer {
     }
     if (!data.name) data.name = this.title;
 
-    const locationMatch = rawText.match(/Location:\s*([^\n]+)/i);
-    if (locationMatch) {
-      const loc = locationMatch[1].trim();
-      if (loc.length > 0 && loc.length < 150) {
-        data.location = loc;
-        data.addresses.push(`${data.name}, ${loc}, Sri Lanka`);
-      }
-    }
-    if (data.addresses.length === 0) {
+    // Use AddressEngine for extraction
+    const extractedAddresses = AddressEngine.extract(rawText, data.name);
+    data.addresses = extractedAddresses;
+    if (extractedAddresses.length > 0) {
+      // Set location to the city/area of the first address
+      const firstAddr = extractedAddresses[0];
+      const areaPart = firstAddr.split(',')[0].trim();
+      data.location = areaPart;
+    } else {
       data.addresses.push(`${data.name}, Sri Lanka`);
     }
 

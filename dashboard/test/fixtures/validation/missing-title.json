@@ -1,0 +1,22 @@
+{
+  "description": "Golden fixture: empty title triggers MISSING_TITLE",
+  "offer": {
+    "title": "",
+    "merchantName": "Demo Merchant",
+    "category": "Dining",
+    "cardType": "credit",
+    "discountPercentage": 10,
+    "discountDescription": "10% off",
+    "validFrom": "2026-01-01",
+    "validTo": "2026-12-31",
+    "daysApplicable": null
+  },
+  "rawData": {
+    "rawValidFrom": "2026-01-01",
+    "rawValidUntil": "2026-12-31",
+    "rawValidityText": "Valid through 2026",
+    "rawDiscountPhrase": "10% off",
+    "rawHtmlContent": "<p>10% off at Demo Merchant</p>"
+  },
+  "expectedRuleIssues": ["MISSING_TITLE"]
+}

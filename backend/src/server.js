@@ -1,15 +1,30 @@
 ﻿const express = require('express');
 const cors = require('cors');
+const { createRateLimiter } = require('./middleware/simple-rate-limit');
 const { pool } = require('./db');
 const { config, validateConfig } = require('./utils/config');
 const log = require('./utils/logger');
+const { requireAdminApiKey } = require('./middleware/admin-auth');
 
 const healthRoutes = require('./routes/health');
 const offersRoutes = require('./routes/offers');
+const catalogRoutes = require('./routes/catalog');
+const adminOffersRoutes = require('./routes/admin-offers');
 
 validateConfig();
 
 const app = express();
+
+// Trust reverse proxy for accurate client IP (rate limiter correctness).
+// Set TRUST_PROXY=1 in env when behind one nginx/load-balancer hop.
+if (config.trustProxy) {
+  app.set('trust proxy', config.trustProxy);
+}
+
+const publicApiLimiter = createRateLimiter({
+  windowMs: 60 * 1000,
+  max: Number.parseInt(process.env.RATE_LIMIT_MAX || '300', 10),
+});
 
 const corsOptions = {
   origin(origin, callback) {
@@ -38,7 +53,15 @@ app.get('/', (_req, res) => {
 });
 
 app.use('/api/v1', healthRoutes);
-app.use('/api/v1/offers', offersRoutes);
+app.use('/api/v1/offers', publicApiLimiter, offersRoutes);
+app.use('/api/v1', publicApiLimiter, catalogRoutes);
+
+if (config.adminApiKey) {
+  app.use('/api/v1/admin/offers', publicApiLimiter, requireAdminApiKey, adminOffersRoutes);
+  log.info('Server', 'Admin offer routes enabled at /api/v1/admin/offers');
+} else {
+  log.warn('Server', 'ADMIN_API_KEY not set — PATCH/publish/reject are disabled (use dashboard + DB or set ADMIN_API_KEY)');
+}
 
 app.use((_req, res) => {
   res.status(404).json({
@@ -48,8 +71,9 @@ app.use((_req, res) => {
 });
 
 app.use((error, _req, res, _next) => {
-  log.error('HTTP', 'Unhandled server error', { message: error.message });
-  res.status(500).json({ error: 'Internal Server Error', message: error.message });
+  log.error('HTTP', 'Unhandled server error', { message: error.message, stack: error.stack });
+  const publicMsg = config.nodeEnv === 'production' ? 'An unexpected error occurred' : error.message;
+  res.status(500).json({ error: 'Internal Server Error', message: publicMsg });
 });
 
 let server = null;

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Search, Filter, RefreshCw, Zap, AlertCircle, CheckCircle2, MoreVertical, Edit3, Globe, ShieldCheck } from 'lucide-react';
+import { Search, Filter, RefreshCw, Zap, AlertCircle, CheckCircle2, MoreVertical, Edit3, Globe, ShieldCheck, Sparkles } from 'lucide-react';
 import OfferReviewPanel from '@/components/Admin/OfferReviewPanel';
 
 export default function IngestionQueue() {
@@ -9,14 +9,31 @@ export default function IngestionQueue() {
     const [loading, setLoading] = useState(true);
     const [selectedOffer, setSelectedOffer] = useState(null);
     const [isPanelOpen, setIsPanelOpen] = useState(false);
-    const [filter, setFilter] = useState('all'); // all, flagged, ai_approved
+    const [filter, setFilter] = useState('all'); // all, flagged, ai_approved, pending
+    const [page, setPage] = useState(1);
+    const [totalPages, setTotalPages] = useState(1);
+    const PAGE_SIZE = 50;
 
-    const fetchQueue = async () => {
+    const fetchQueue = async (pageNum = 1, statusFilter = 'all') => {
         setLoading(true);
         try {
-            const res = await fetch('/api/offers?is_in_production=false&limit=100');
+            // Only fetch review-queue statuses — exclude already-rejected and approved+in-production
+            const statusParam = statusFilter === 'all'
+                ? 'pending,flagged,approved_by_ai'
+                : statusFilter === 'ai_approved'
+                    ? 'approved_by_ai'
+                    : statusFilter;
+
+            const params = new URLSearchParams({
+                is_in_production: 'false',
+                status: statusParam,
+                page: String(pageNum),
+                limit: String(PAGE_SIZE),
+            });
+            const res = await fetch(`/api/offers?${params}`);
             const data = await res.json();
-            setOffers(data.offers);
+            setOffers(data.offers || []);
+            setTotalPages(data.pagination?.totalPages || 1);
         } catch (err) {
             console.error('Failed to fetch queue:', err);
         } finally {
@@ -25,7 +42,7 @@ export default function IngestionQueue() {
     };
 
     useEffect(() => {
-        fetchQueue();
+        fetchQueue(1, filter);
     }, []);
 
     const openReview = (offer) => {
@@ -35,17 +52,24 @@ export default function IngestionQueue() {
 
     const onOfferUpdate = (updated) => {
         setOffers(prev => prev.map(o => o.id === updated.id ? updated : o));
-        // If it was published, we might want to remove it from the queue view eventually
-        if (updated.isInProduction) {
+        if (updated.isInProduction || updated.reviewStatus === 'rejected') {
             setOffers(prev => prev.filter(o => o.id !== updated.id));
         }
     };
 
-    const filteredOffers = offers.filter(o => {
-        if (filter === 'flagged') return o.reviewStatus === 'flagged';
-        if (filter === 'ai_approved') return o.reviewStatus === 'approved_by_ai';
-        return true;
-    });
+    const handleFilterChange = (newFilter) => {
+        setFilter(newFilter);
+        setPage(1);
+        fetchQueue(1, newFilter);
+    };
+
+    const handlePageChange = (newPage) => {
+        setPage(newPage);
+        fetchQueue(newPage, filter);
+    };
+
+    // Server already filtered by status, no client-side re-filter needed
+    const filteredOffers = offers;
 
     return (
         <div className="space-y-8 animate-fade-in min-h-screen bg-[#020617] p-8">
@@ -58,27 +82,44 @@ export default function IngestionQueue() {
                         Ingestion Queue
                     </h1>
                     <p className="text-slate-400 mt-2 font-medium">Level 6 Publishing Portal — Review and push AI-validated offers to production.</p>
+                    <div className="mt-4 max-w-3xl rounded-xl border border-white/10 bg-slate-900/40 p-4 text-xs text-slate-400 leading-relaxed">
+                        <p className="font-bold text-slate-300 mb-2">Review statuses</p>
+                        <ul className="list-disc list-inside space-y-1">
+                            <li><span className="text-slate-200">pending</span> — Awaiting validation or not yet processed.</li>
+                            <li><span className="text-amber-400">flagged</span> — Issues detected; hidden from the public app until corrected and published.</li>
+                            <li><span className="text-emerald-400">approved_by_ai</span> — Passed automated validation; still require your publish action for production.</li>
+                            <li><span className="text-sky-400">approved</span> — Human-approved; with <strong className="text-slate-200">in production</strong> enabled, visible on the public API.</li>
+                            <li><span className="text-rose-400">rejected</span> — Excluded from production.</li>
+                        </ul>
+                        <p className="mt-2 text-slate-500">The public app only lists offers that are <strong className="text-slate-400">active</strong>, <strong className="text-slate-400">in production</strong>, and <strong className="text-slate-400">approved</strong> or <strong className="text-slate-400">approved_by_ai</strong>.</p>
+                    </div>
                 </div>
 
                 <div className="flex items-center gap-3">
                     <div className="flex bg-slate-900/50 p-1 rounded-xl border border-white/5">
                         <button
-                            onClick={() => setFilter('all')}
+                            onClick={() => handleFilterChange('all')}
                             className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${filter === 'all' ? 'bg-sky-500 text-white shadow-lg shadow-sky-500/20' : 'text-slate-400 hover:text-slate-200'}`}
                         >
-                            All {offers.length}
+                            All
                         </button>
                         <button
-                            onClick={() => setFilter('flagged')}
+                            onClick={() => handleFilterChange('flagged')}
                             className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${filter === 'flagged' ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/20' : 'text-slate-400 hover:text-slate-200'}`}
                         >
-                            Flagged {offers.filter(o => o.reviewStatus === 'flagged').length}
+                            Flagged
                         </button>
                         <button
-                            onClick={() => setFilter('ai_approved')}
+                            onClick={() => handleFilterChange('ai_approved')}
                             className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${filter === 'ai_approved' ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20' : 'text-slate-400 hover:text-slate-200'}`}
                         >
-                            AI Approved {offers.filter(o => o.reviewStatus === 'approved_by_ai').length}
+                            AI Approved
+                        </button>
+                        <button
+                            onClick={() => handleFilterChange('pending')}
+                            className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${filter === 'pending' ? 'bg-slate-500 text-white shadow-lg shadow-slate-500/20' : 'text-slate-400 hover:text-slate-200'}`}
+                        >
+                            Pending
                         </button>
                     </div>
 
@@ -150,6 +191,29 @@ export default function IngestionQueue() {
                             </div>
                         </div>
                     ))}
+                </div>
+            )}
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+                <div className="flex items-center justify-center gap-3 pt-4">
+                    <button
+                        onClick={() => handlePageChange(page - 1)}
+                        disabled={page <= 1 || loading}
+                        className="px-4 py-2 rounded-lg bg-slate-800 text-slate-300 text-xs font-bold disabled:opacity-40 hover:bg-slate-700 transition-all border border-white/5"
+                    >
+                        Previous
+                    </button>
+                    <span className="text-slate-400 text-xs font-medium">
+                        Page {page} of {totalPages}
+                    </span>
+                    <button
+                        onClick={() => handlePageChange(page + 1)}
+                        disabled={page >= totalPages || loading}
+                        className="px-4 py-2 rounded-lg bg-slate-800 text-slate-300 text-xs font-bold disabled:opacity-40 hover:bg-slate-700 transition-all border border-white/5"
+                    >
+                        Next
+                    </button>
                 </div>
             )}
 
